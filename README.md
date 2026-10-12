@@ -11,10 +11,14 @@ Needs Node 22.18 or later (it runs the TypeScript directly and uses the built-in
 
 ```sh
 npm install                # dev tools only (typescript, @types/node)
-cp .env.example .env       # then put the API key in .env
+npm run env                # writes .env from 1Password (op inject on .env.tpl)
 npm run export -- ping     # check the key and site name
 npm run export             # everything; safe to stop and re-run
 ```
+
+The key lives in 1Password at `op://NodeBox/NodeBox Tender Forum/credential`.
+`npm run env` needs the 1Password CLI (`op`) signed in. Without 1Password, copy
+`.env.example` to `.env` and fill it in by hand.
 
 Output goes to `data/` (git-ignored):
 

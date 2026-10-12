@@ -8,6 +8,7 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "env": "op inject -f -i .env.tpl -o .env && chmod 600 .env",
     "export": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts"

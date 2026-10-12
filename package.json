@@ -11,10 +11,14 @@
     "env": "op inject -f -i .env.tpl -o .env && chmod 600 .env",
     "export": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts"
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "spam": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/spam-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
   }
 }

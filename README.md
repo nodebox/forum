@@ -45,6 +45,53 @@ discussions whose `updated_at` changed.
 
 To have Claude Code run and debug the first export: `claude "$(cat HANDOFF.md)"`.
 
+## Filtering spam
+
+Tender only knows about the spam its own filter caught. `npm run spam` finds the
+rest (phishing, link drops, casino ads) with Claude, after the export has run.
+Nothing is deleted: verdicts go into `spam_verdicts`, and the import leaves out
+what is in the `spam_excluded` view.
+
+```sh
+npm run spam -- estimate             # how many discussions reach the model, and the cost
+npm run spam -- classify --limit=50  # trial run
+npm run spam -- classify             # everything; safe to stop and re-run
+npm run spam -- review               # writes data/spam-review.csv
+npm run spam -- apply data/spam-review.csv
+npm run spam -- stats
+```
+
+It needs `ANTHROPIC_API_KEY` in `.env`; `npm run env` fills it in from 1Password
+(`op://NodeBox/NodeBox Tender Forum/ANTHROPIC_API_KEY`). The model is
+`claude-haiku-5-5` at low effort; `SPAM_MODEL` picks another one.
+
+How a discussion is decided:
+
+- Discussions Tender marked as spam are spam (export them with `TENDER_INCLUDE_DELETED=1`).
+- A discussion that NodeBox staff replied to, where nobody else posted a link to
+  an unknown site, is genuine without asking the model.
+- Everything else goes to the model with all its public comments. It returns
+  spam, ham or unsure for the discussion, with a confidence, and can flag single
+  spam replies inside a genuine discussion.
+
+Model verdicts with confidence 0.9 or more are excluded straight away. The review
+CSV lists everything else worth a look, least certain first: all spam and unsure
+verdicts, and genuine verdicts below 0.7. Put `spam` or `ham` in the `decision`
+column where you want to confirm or overrule, and run `apply`; your decisions win
+over the model's. An empty decision keeps the model's verdict.
+
+For the import, `spam_excluded` has `(discussion_id, comment_number, reason)` rows;
+`comment_number = 0` drops the whole discussion, any other number drops that reply:
+
+```sql
+SELECT * FROM discussions d
+WHERE NOT EXISTS (SELECT 1 FROM spam_excluded s WHERE s.discussion_id = d.id AND s.comment_number = 0);
+
+SELECT * FROM comments c
+WHERE NOT EXISTS (SELECT 1 FROM spam_excluded s WHERE s.discussion_id = c.discussion_id
+                  AND s.comment_number IN (0, c.number));
+```
+
 ## Schema
 
 `migrations/0001_tender_import.sql` is plain SQLite and D1-compatible, so the

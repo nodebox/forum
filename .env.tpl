@@ -2,3 +2,5 @@
 # or skip writing .env at all:        op run --env-file=.env.tpl -- npm run export
 TENDER_API_KEY={{ op://NodeBox/NodeBox Tender Forum/credential }}
 TENDER_SITE=nodebox
+# For `npm run spam`.
+ANTHROPIC_API_KEY={{ op://NodeBox/NodeBox Tender Forum/ANTHROPIC_API_KEY }}

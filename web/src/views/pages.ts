@@ -27,7 +27,7 @@ function topicList(topics: TopicRow[], opts: { showCategory: boolean }): Html {
           </div>
         </div>
         <div class="topic-stats">
-          <span class="replies" title="${t.post_count - 1} replies"><span class="count">${t.post_count - 1}</span><span class="visually-hidden"> replies</span></span>
+          <span class="replies"><span class="count">${t.post_count - 1}</span><span class="replies-label">${t.post_count - 1 === 1 ? "reply" : "replies"}</span></span>
           <span class="activity">${time(t.last_post_at)}</span>
         </div>
       </li>`,
@@ -49,6 +49,7 @@ export function homePage(categories: Category[], latest: TopicRow[], page: numbe
   return html`
     ${page === 1
       ? html`<section class="hero">
+          <p class="eyebrow">The NodeBox community</p>
           <h1>Ask, share, and learn NodeBox together.</h1>
           <p class="lede">Questions about NodeBox 3, projects you made, bugs you found. Drop a project ZIP or a screenshot right into your post.</p>
           ${signedIn ? html`<a class="button button-accent" href="/new">Start a topic</a>` : html`<a class="button button-accent" href="/signin?next=/new">Start a topic</a>`}
@@ -57,7 +58,8 @@ export function homePage(categories: Category[], latest: TopicRow[], page: numbe
           <h2 id="cats-h" class="section-title">Categories</h2>
           <ul class="category-grid">
             ${categories.map(
-              (c) => html`<li><a class="category-card" href="/c/${c.slug}">
+              (c, i) => html`<li><a class="category-card" href="/c/${c.slug}">
+                <span class="category-index">${String(i + 1).padStart(2, "0")}</span>
                 <span class="category-name">${c.name}</span>
                 ${c.description ? html`<span class="category-desc">${c.description}</span>` : ""}
                 <span class="category-count">${c.topic_count} ${c.topic_count === 1 ? "topic" : "topics"}</span>
@@ -135,19 +137,19 @@ export function topicPage(
     <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Forum</a> <span aria-hidden="true">/</span> <a href="/c/${topic.category_slug}">${topic.category_name}</a></nav>
     <div class="topic-head">
       <h1>${topic.title}</h1>
-      <p class="topic-sub">${topicBadges(topic)}${topic.tender_id ? html`<span class="badge badge-legacy" title="This topic was moved here from the old forum">From the old forum</span>` : ""}</p>
+      <p class="topic-sub"><span class="muted">Started by ${topic.author_name} · ${topic.post_count - 1} ${topic.post_count - 1 === 1 ? "reply" : "replies"}</span>${topicBadges(topic)}${topic.tender_id ? html`<span class="badge badge-legacy" title="This topic was moved here from the old forum">From the old forum</span>` : ""}</p>
     </div>
     ${isAdmin ? topicModBar(topic) : ""}
     <ol class="posts" start="${opts.firstIndex + 1}">
       ${posts.map(
         (p) => html`<li class="post${p.post.status !== "visible" ? " post-hidden" : ""}" id="post-${p.post.id}">
-          <div class="post-side">${avatar({ id: p.post.user_id, name: p.post.author_name })}</div>
+          <header class="post-byline">
+            ${avatar({ id: p.post.user_id, name: p.post.author_name })}
+            <span class="post-author">${p.post.author_name}</span>
+            ${p.post.author_is_admin ? html`<span class="badge badge-team">NodeBox team</span>` : ""}
+            <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
+          </header>
           <article class="post-body">
-            <header class="post-head">
-              <span class="post-author">${p.post.author_name}</span>
-              ${p.post.author_is_admin ? html`<span class="badge badge-team">NodeBox team</span>` : ""}
-              <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
-            </header>
             <div class="prose">${raw(p.html)}</div>
             ${p.images.length
               ? html`<ul class="gallery">${p.images.map((img) => html`<li><a href="${img.full}" target="_blank" rel="noopener"><img src="${img.thumb}" alt="${img.a.filename}" loading="lazy"></a></li>`)}</ul>`

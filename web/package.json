@@ -21,8 +21,8 @@
     "markdown-it": "15.0.2"
   },
   "devDependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-next": "^5.3.0",
     "@fontsource/atkinson-hyperlegible-mono": "^5.3.0",
-    "@fontsource/atkinson-hyperlegible-next": "5.3.0",
     "@types/markdown-it": "14.2.0",
     "@types/node": "^22.19.0",
     "esbuild": "0.28.2",

@@ -13,15 +13,17 @@ await build({
   logLevel: "warning",
 });
 
+// Atkinson Hyperlegible Next as one variable font (weights 200 to 800), plus Mono for code.
 const fonts = [
-  ["atkinson-hyperlegible-next", ["latin-400-normal", "latin-400-italic", "latin-700-normal", "latin-ext-400-normal", "latin-ext-700-normal"]],
-  ["atkinson-hyperlegible-mono", ["latin-400-normal"]],
+  ["@fontsource-variable/atkinson-hyperlegible-next", "atkinson-hyperlegible-next", ["latin-wght-normal", "latin-wght-italic", "latin-ext-wght-normal"]],
+  ["@fontsource/atkinson-hyperlegible-mono", "atkinson-hyperlegible-mono", ["latin-400-normal"]],
 ];
+fs.rmSync("public/fonts", { recursive: true, force: true });
 fs.mkdirSync("public/fonts", { recursive: true });
-for (const [family, files] of fonts) {
+for (const [pkg, family, files] of fonts) {
   for (const f of files) {
     const name = `${family}-${f}.woff2`;
-    fs.copyFileSync(path.join("node_modules/@fontsource", family, "files", name), path.join("public/fonts", name));
+    fs.copyFileSync(path.join("node_modules", pkg, "files", name), path.join("public/fonts", name));
   }
 }
 console.log("client built");

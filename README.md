@@ -1,8 +1,10 @@
 # NodeBox forum
 
 The plan is to replace the Tender-hosted NodeBox forum with our own forum on
-Cloudflare (Hono + TypeScript, D1 for data, R2 for attachments). Step one, in
-this repo now, is getting everything out of Tender into a local SQLite database.
+Cloudflare (Hono + TypeScript, D1 for data, R2 for attachments). This repo has
+two parts: the Tender exporter (here, in `src/`), which gets everything out of
+Tender into a local SQLite database, and the forum app in `web/` (see
+`web/README.md`). The plan is in `docs/PLAN.md`.
 
 ## Exporting from Tender
 

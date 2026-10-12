@@ -164,8 +164,8 @@ Topic authors can mark their own topic solved.
   same queue, so a false positive is one click to restore. The filter writes
   its results into `data/forum.sqlite` (`migrations/0002_spam.sql` on the
   spam-filter branch); the import reads the `spam_excluded` view, which already
-  applies the review decisions and the confidence threshold, and takes the
-  reason from `spam_verdicts`.
+  applies the review decisions and the confidence threshold, and carries the
+  reason.
 
 **Needs Frederik:** the acceptable use policy text itself (the removal reasons
 in `web/src/moderation.ts` are a first guess at its headings).

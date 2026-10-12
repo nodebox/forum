@@ -47,9 +47,11 @@ function fixture(): DatabaseSync {
     CREATE TABLE spam_decisions (discussion_id INTEGER NOT NULL, comment_number INTEGER NOT NULL, decision TEXT NOT NULL, decided_at TEXT NOT NULL,
       PRIMARY KEY (discussion_id, comment_number));
     CREATE VIEW spam_excluded AS
-      SELECT discussion_id, comment_number FROM spam_decisions WHERE decision = 'spam'
-      UNION
-      SELECT v.discussion_id, v.comment_number FROM spam_verdicts v
+      SELECT m.discussion_id, m.comment_number, COALESCE(v.reason, 'marked spam in review') AS reason
+      FROM spam_decisions m LEFT JOIN spam_verdicts v ON v.discussion_id = m.discussion_id AND v.comment_number = m.comment_number
+      WHERE m.decision = 'spam'
+      UNION ALL
+      SELECT v.discussion_id, v.comment_number, v.reason FROM spam_verdicts v
       LEFT JOIN spam_decisions m ON m.discussion_id = v.discussion_id AND m.comment_number = v.comment_number
       WHERE m.decision IS NULL AND v.verdict = 'spam' AND (v.source <> 'model' OR v.confidence >= 0.9);
     INSERT INTO spam_verdicts VALUES
@@ -98,7 +100,7 @@ test("converts a Tender export into forum rows", () => {
   const reasons = db.prepare("SELECT topic_id, tender_number, moderation_reason FROM posts WHERE status = 'spam' ORDER BY id").all().map((r) => ({ ...r }));
   assert.deepEqual(reasons, [
     { topic_id: 100, tender_number: 4, moderation_reason: "Spam filter: marked spam in review" },
-    { topic_id: 101, tender_number: 1, moderation_reason: "Spam filter (model): phishing" },
+    { topic_id: 101, tender_number: 1, moderation_reason: "Spam filter: phishing" },
   ]);
   assert.equal(stats.spamTopics, 1);
   assert.equal(stats.spamPosts, 2);

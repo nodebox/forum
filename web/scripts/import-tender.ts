@@ -106,28 +106,14 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
 
   // Spam flags from the spam filter (migrations/0002_spam.sql), if it has run.
   // `spam_excluded` already folds in review decisions and the confidence
-  // threshold; comment_number 0 means the whole discussion.
+  // threshold; comment_number 0 means the whole discussion. Every row is spam.
   const spamDiscussions = new Map<number, string>();
   const spamComments = new Map<string, string>();
   if (tableExists(src, "spam_excluded")) {
-    const hasVerdicts = tableExists(src, "spam_verdicts");
-    const hasDecisions = tableExists(src, "spam_decisions");
-    const rows = src
-      .prepare(
-        `SELECT e.discussion_id, e.comment_number,
-                ${hasDecisions ? "d.decision" : "NULL"} AS decision,
-                ${hasVerdicts ? "v.source" : "NULL"} AS source,
-                ${hasVerdicts ? "v.reason" : "NULL"} AS reason
-         FROM spam_excluded e
-         ${hasDecisions ? "LEFT JOIN spam_decisions d ON d.discussion_id = e.discussion_id AND d.comment_number = e.comment_number" : ""}
-         ${hasVerdicts ? "LEFT JOIN spam_verdicts v ON v.discussion_id = e.discussion_id AND v.comment_number = e.comment_number" : ""}`,
-      )
-      .all() as any[];
-    for (const r of rows) {
-      const reason =
-        r.decision === "spam" ? "Spam filter: marked spam in review" : `Spam filter${r.source ? ` (${r.source})` : ""}${r.reason ? `: ${r.reason}` : ""}`;
-      if (r.comment_number === 0) spamDiscussions.set(r.discussion_id, reason.slice(0, 300));
-      else spamComments.set(`${r.discussion_id}:${r.comment_number}`, reason.slice(0, 300));
+    for (const r of src.prepare("SELECT discussion_id, comment_number, reason FROM spam_excluded").all() as any[]) {
+      const reason = `Spam filter${r.reason ? `: ${r.reason}` : ""}`.slice(0, 300);
+      if (r.comment_number === 0) spamDiscussions.set(r.discussion_id, reason);
+      else spamComments.set(`${r.discussion_id}:${r.comment_number}`, reason);
     }
   }
 

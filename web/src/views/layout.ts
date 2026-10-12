@@ -1,6 +1,7 @@
 import { html, raw } from "hono/html";
-import type { User } from "../db.ts";
+import type { Category, User } from "../db.ts";
 import { hueFor, initials } from "../util.ts";
+import { icon } from "./icons.ts";
 
 export type Html = ReturnType<typeof html>;
 
@@ -10,21 +11,56 @@ export interface LayoutProps {
   user: User | null;
   notice?: string | null;
   showBanner?: boolean;
-  /** Path of the current page, used for "sign in" return links. */
+  /** Path of the current page, used for "sign in" return links and the active sidebar item. */
   path: string;
   siteName: string;
+  /** Categories for the sidebar. */
+  categories: Category[];
   /** Extra class on <main>, e.g. "narrow". */
   mainClass?: string;
 }
 
-const logo = raw(`<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
-  <path d="M9 10 C 16 10, 16 22, 23 22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-  <rect x="3" y="5" width="10" height="10" fill="#ffffff"/>
-  <rect x="19" y="17" width="10" height="10" fill="var(--accent)"/>
-</svg>`);
+/** The NodeBox Live mark (logo.svg from Frederik), drawn in the current text colour. */
+const logo = raw(`<svg class="logo-mark" viewBox="0 0 300 300" aria-hidden="true"><path fill="currentColor" d="M72.5,147.1L41.2,133V57.3l68.7-30.2l68.3,30.1v75.7L146.7,147c-5.1,2.3-8.3,7.7-7.3,13.2c1.2,6.1,6.3,9.9,11.8,9.9 c1.6,0,3.3-0.3,4.9-1.1l38.9-17.5c4.3-1.9,7-6.2,7-10.9V49.3c0-4.7-2.8-9-7.1-10.9L114.6,3c-3.1-1.3-6.6-1.4-9.6,0L24.3,38.4 c-4.3,1.9-7.1,6.2-7.1,10.9v91.3c0,4.7,2.8,9,7,10.9L63.1,169c6.7,3,14.7-0.6,16.5-8.1C81.2,155.4,77.8,149.5,72.5,147.1z M275.7,147.5L236.8,130c-6.7-3-14.7,0.6-16.5,8.1c-1.4,5.7,1.9,11.5,7.2,13.9l31.4,14.1v75.8L190.5,273l-68.7-30.1V89.1 c0-4.7-2.7-8.9-6.9-10.8L77.3,60.9c-4.7-2.2-10.5-1.4-14,2.4c-5.8,6.4-3.4,15.8,3.7,19.1l31,14.3v154c0,4.7,2.8,9,7.1,10.9 l80.7,35.4c1.5,0.7,3.2,1,4.8,1c1.7,0,3.4-0.4,4.9-1.1l80.3-36.5c4.3-1.9,7-6.2,7-10.9v-91.3C282.7,153.6,279.9,149.4,275.7,147.5z"/></svg>`);
+
+/** Category colours, picked by category id. Muted, so the coloured square stays a marker. */
+const CATEGORY_COLOURS = ["#0072bc", "#b8703d", "#3f7d5a", "#7a5c99", "#00a3d4", "#9a4f5f", "#5c6b80"];
+export const categoryColour = (id: number) => CATEGORY_COLOURS[id % CATEGORY_COLOURS.length]!;
+
+export function categoryBadge(c: { id: number; slug: string; name: string }): Html {
+  return html`<a class="cat" href="/c/${c.slug}"><span class="cat-sq" style="--cat:${categoryColour(c.id)}" aria-hidden="true"></span>${c.name}</a>`;
+}
 
 export function avatar(user: { id: number; name: string }, size: "sm" | "md" = "md"): Html {
   return html`<span class="avatar avatar-${size}" style="--hue:${hueFor(user.id)}" aria-hidden="true">${initials(user.name)}</span>`;
+}
+
+function sidebar(props: LayoutProps): Html {
+  const here = props.path.split("?")[0];
+  const item = (href: string, label: string, ico: Html, external = false) =>
+    html`<li><a href="${href}" class="side-link${here === href ? " active" : ""}" ${here === href ? raw('aria-current="page"') : ""} ${external ? raw('rel="noopener"') : ""}>${ico}<span>${label}</span></a></li>`;
+  return html`<nav class="sidebar" id="sidebar" aria-label="Forum">
+    <ul class="side-list">
+      ${item("/", "Latest", icon("messages-square"))}
+      ${props.user ? item("/topics/mine", "Your topics", icon("bell")) : ""}
+      ${props.user?.is_admin ? item("/admin", "Moderation", icon("shield")) : ""}
+    </ul>
+    <h2 class="side-head">Categories</h2>
+    <ul class="side-list">
+      ${props.categories.map(
+        (c) => html`<li><a href="/c/${c.slug}" class="side-link${here === `/c/${c.slug}` ? " active" : ""}">
+          <span class="cat-sq" style="--cat:${categoryColour(c.id)}" aria-hidden="true"></span><span>${c.name}</span>
+        </a></li>`,
+      )}
+    </ul>
+    <h2 class="side-head">Resources</h2>
+    <ul class="side-list">
+      ${item("/guidelines", "Guidelines", icon("file-text"))}
+      ${item("/aup", "Acceptable use", icon("scale"))}
+      ${item("https://www.nodebox.net/node/", "Documentation", icon("book-open"), true)}
+      ${item("https://www.nodebox.net/", "nodebox.net", icon("external-link"), true)}
+    </ul>
+  </nav>`;
 }
 
 export function layout(props: LayoutProps, content: Html): Html {
@@ -47,40 +83,47 @@ export function layout(props: LayoutProps, content: Html): Html {
   <a class="skip" href="#main">Skip to content</a>
   ${props.showBanner
     ? html`<div class="banner" data-banner>
-        <p><strong>Welcome to the new NodeBox forum.</strong>
-        Had an account on the old one? <a href="${signInHref}">Sign in with the same email</a> and your posts are waiting for you.</p>
-        <button type="button" class="banner-close" data-dismiss-banner aria-label="Dismiss">×</button>
+        <div class="wrap grid">
+          <p><strong>Welcome to the new NodeBox forum.</strong>
+          Had an account on the old one? <a href="${signInHref}">Sign in with the same email</a> and your posts are waiting for you.</p>
+          <button type="button" class="icon-button banner-close" data-dismiss-banner aria-label="Dismiss">${icon("x", { size: 16 })}</button>
+        </div>
       </div>`
     : ""}
   <header class="site-header">
-    <div class="wrap header-row">
-      <a class="brand" href="/">${logo}<span class="brand-word">NodeBox</span><span class="brand-sub">Forum</span></a>
-      <nav class="header-nav" aria-label="Main">
+    <div class="wrap grid header-row">
+      <div class="header-brand">
+        <button type="button" class="icon-button nav-toggle" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="Menu">${icon("menu", { size: 20 })}</button>
+        <a class="brand" href="/">${logo}<span class="brand-word">NodeBox</span><span class="brand-sub">Forum</span></a>
+      </div>
+      <nav class="header-nav" aria-label="Account">
         ${props.user
-          ? html`<a class="header-link" href="/topics/mine">Your topics</a>
-              <a class="button button-accent" href="/new">New topic</a>
+          ? html`<a class="button button-light" href="/new">${icon("plus", { size: 16 })}<span>New topic</span></a>
+              <a class="icon-button header-icon" href="/topics/mine" aria-label="Your topics" title="Your topics">${icon("bell", { size: 20 })}</a>
               <details class="user-menu">
-                <summary aria-label="Account">${avatar(props.user, "sm")}<span class="user-menu-name">${props.user.name}</span></summary>
+                <summary aria-label="Account menu">${avatar(props.user, "sm")}</summary>
                 <div class="user-menu-panel">
-                  <p class="muted small">Signed in as<br>${props.user.email}</p>
-                  <a href="/topics/mine">Your topics</a>
-                  <a href="/settings">Settings</a>
-                  ${props.user.is_admin ? html`<a href="/admin">Moderation</a>` : ""}
-                  <form method="post" action="/signout"><button type="submit" class="linklike">Sign out</button></form>
+                  <p class="user-menu-who"><strong>${props.user.name}</strong><span>${props.user.email}</span></p>
+                  <a href="/topics/mine">${icon("bell", { size: 16 })}Your topics</a>
+                  <a href="/settings">${icon("settings", { size: 16 })}Settings</a>
+                  ${props.user.is_admin ? html`<a href="/admin">${icon("shield", { size: 16 })}Moderation</a>` : ""}
+                  <form method="post" action="/signout"><button type="submit" class="linklike">${icon("log-out", { size: 16 })}Sign out</button></form>
                 </div>
               </details>`
-          : html`<a class="button button-quiet" href="${signInHref}">Sign in</a>
-              <a class="button button-accent" href="${signInHref}">Join</a>`}
+          : html`<a class="button button-light" href="${signInHref}">${icon("log-in", { size: 16 })}<span>Sign in</span></a>`}
       </nav>
     </div>
   </header>
-  <main id="main" class="wrap ${props.mainClass ?? ""}">
-    ${props.notice ? html`<p class="notice" role="status">${props.notice}</p>` : ""}
-    ${content}
-  </main>
+  <div class="wrap grid shell">
+    ${sidebar(props)}
+    <main id="main" class="main ${props.mainClass ?? ""}">
+      ${props.notice ? html`<p class="notice" role="status">${icon("circle-check", { size: 18 })}<span>${props.notice}</span></p>` : ""}
+      ${content}
+    </main>
+  </div>
   <footer class="site-footer">
-    <div class="wrap">
-      <p><a href="https://www.nodebox.net/">nodebox.net</a> · <a href="https://www.nodebox.net/node/">Documentation</a> · <a href="/guidelines">Guidelines</a> · <a href="/aup">Acceptable use</a></p>
+    <div class="wrap grid">
+      <p>The NodeBox forum. Built by the <a href="https://www.emrg.be/">Experimental Media Research Group</a>.</p>
     </div>
   </footer>
 </body>

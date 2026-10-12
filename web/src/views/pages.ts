@@ -2,7 +2,8 @@ import { html, raw } from "hono/html";
 import { REACTIONS, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
 import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
-import { avatar, type Html } from "./layout.ts";
+import { avatar, categoryBadge, type Html } from "./layout.ts";
+import { icon } from "./icons.ts";
 import { postModMenu, topicModBar } from "./admin.ts";
 import type { YourThread } from "../notifications.ts";
 
@@ -10,82 +11,94 @@ const time = (iso: string) => html`<time datetime="${iso}" title="${new Date(iso
 
 export const topicUrl = (t: { id: number; slug: string }) => `/t/${t.id}/${t.slug}`;
 
-function topicBadges(t: TopicRow): Html {
-  return html`${t.pinned ? html`<span class="badge badge-pinned">Pinned</span>` : ""}${t.solved ? html`<span class="badge badge-solved">Solved</span>` : ""}${t.locked ? html`<span class="badge">Locked</span>` : ""}`;
+/** Small status icons before a topic title, as on Discourse. */
+function statusIcons(t: { pinned: number; locked: number; solved: number }): Html {
+  return html`${t.pinned ? html`<span class="status" title="Pinned">${icon("pin", { size: 16, label: "Pinned" })}</span>` : ""}${t.locked
+    ? html`<span class="status" title="Locked">${icon("lock", { size: 16, label: "Locked" })}</span>`
+    : ""}${t.solved ? html`<span class="status status-solved" title="Solved">${icon("circle-check", { size: 16, label: "Solved" })}</span>` : ""}`;
+}
+
+interface ListRow {
+  id: number;
+  title: string;
+  slug: string;
+  post_count: number;
+  last_post_at: string;
+  pinned: number;
+  locked: number;
+  solved: number;
+  category_id: number;
+  category_name: string;
+  category_slug: string;
+}
+
+/** The topic table: Topic | Replies | Activity, on the main grid. */
+function topicTable<T extends ListRow>(topics: T[], opts: { showCategory: boolean; href?: (t: T) => string; meta: (t: T) => Html; unread?: (t: T) => boolean }): Html {
+  return html`<div class="topic-table" role="table" aria-label="Topics">
+    <div class="topic-row topic-row-head" role="row">
+      <span role="columnheader">Topic</span><span role="columnheader" class="num">Replies</span><span role="columnheader" class="num">Activity</span>
+    </div>
+    ${topics.map(
+      (t) => html`<div class="topic-row${opts.unread?.(t) ? " unread" : ""}" role="row">
+        <div class="topic-cell" role="cell">
+          <a class="topic-title" href="${opts.href ? opts.href(t) : topicUrl(t)}">${statusIcons(t)}<span>${t.title}</span></a>
+          <div class="topic-meta">
+            ${opts.showCategory ? categoryBadge({ id: t.category_id, slug: t.category_slug, name: t.category_name }) : ""}
+            ${opts.meta(t)}
+          </div>
+        </div>
+        <span class="num replies" role="cell">${t.post_count - 1}</span>
+        <span class="num activity" role="cell">${time(t.last_post_at)}</span>
+      </div>`,
+    )}
+  </div>`;
 }
 
 function topicList(topics: TopicRow[], opts: { showCategory: boolean }): Html {
   if (topics.length === 0) return html`<p class="empty">No topics yet. Be the first to start one.</p>`;
-  return html`<ol class="topic-list">
-    ${topics.map(
-      (t) => html`<li class="topic-item">
-        <div class="topic-main">
-          <a class="topic-title" href="${topicUrl(t)}">${t.title}</a>
-          <div class="topic-meta">
-            ${topicBadges(t)}
-            ${opts.showCategory ? html`<a class="chip" href="/c/${t.category_slug}">${t.category_name}</a>` : ""}
-            <span>${t.author_name}</span>
-          </div>
-        </div>
-        <div class="topic-stats">
-          <span class="replies"><span class="count">${t.post_count - 1}</span><span class="replies-label">${t.post_count - 1 === 1 ? "reply" : "replies"}</span></span>
-          <span class="activity">${time(t.last_post_at)}</span>
-        </div>
-      </li>`,
-    )}
-  </ol>`;
+  return topicTable(topics, { showCategory: opts.showCategory, meta: (t) => html`<span>${t.author_name}</span>` });
 }
 
 function pager(base: string, page: number, hasMore: boolean): Html {
   if (page <= 1 && !hasMore) return html``;
   const href = (p: number) => (p <= 1 ? base : `${base}?page=${p}`);
   return html`<nav class="pager" aria-label="Pages">
-    ${page > 1 ? html`<a class="button button-quiet" href="${href(page - 1)}">← Newer</a>` : html`<span></span>`}
+    ${page > 1 ? html`<a class="button button-quiet" href="${href(page - 1)}">${icon("chevron-left", { size: 16 })}Newer</a>` : html`<span></span>`}
     <span class="muted">Page ${page}</span>
-    ${hasMore ? html`<a class="button button-quiet" href="${href(page + 1)}">Older →</a>` : html`<span></span>`}
+    ${hasMore ? html`<a class="button button-quiet" href="${href(page + 1)}">Older${icon("chevron-right", { size: 16 })}</a>` : html`<span></span>`}
   </nav>`;
 }
 
-export function homePage(categories: Category[], latest: TopicRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
+function mainHead(opts: { title: string; lede?: string | Html; action?: Html; kicker?: Html }): Html {
+  return html`<header class="main-head">
+    <div class="main-head-text">
+      ${opts.kicker ?? ""}
+      <h1>${opts.title}</h1>
+      ${opts.lede ? html`<p class="lede">${opts.lede}</p>` : ""}
+    </div>
+    ${opts.action ? html`<div class="main-head-action">${opts.action}</div>` : ""}
+  </header>`;
+}
+
+export function homePage(_categories: Category[], latest: TopicRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
   return html`
-    ${page === 1
-      ? html`<section class="hero">
-          <p class="eyebrow">The NodeBox community</p>
-          <h1>Ask, share, and learn NodeBox together.</h1>
-          <p class="lede">Questions about NodeBox 3, projects you made, bugs you found. Drop a project ZIP or a screenshot right into your post.</p>
-          ${signedIn ? html`<a class="button button-accent" href="/new">Start a topic</a>` : html`<a class="button button-accent" href="/signin?next=/new">Start a topic</a>`}
-        </section>
-        <section aria-labelledby="cats-h">
-          <h2 id="cats-h" class="section-title">Categories</h2>
-          <ul class="category-grid">
-            ${categories.map(
-              (c, i) => html`<li><a class="category-card" href="/c/${c.slug}">
-                <span class="category-index">${String(i + 1).padStart(2, "0")}</span>
-                <span class="category-name">${c.name}</span>
-                ${c.description ? html`<span class="category-desc">${c.description}</span>` : ""}
-                <span class="category-count">${c.topic_count} ${c.topic_count === 1 ? "topic" : "topics"}</span>
-              </a></li>`,
-            )}
-          </ul>
-        </section>`
-      : ""}
-    <section aria-labelledby="latest-h">
-      <h2 id="latest-h" class="section-title">Latest</h2>
-      ${topicList(latest, { showCategory: true })}
-      ${pager("/", page, hasMore)}
-    </section>`;
+    ${mainHead({
+      title: page === 1 ? "Latest" : `Latest, page ${page}`,
+      lede: page === 1 ? "Questions, projects and bugs from the NodeBox community. Drop a project ZIP or a screenshot right into your post." : undefined,
+      action: html`<a class="button button-primary" href="${signedIn ? "/new" : "/signin?next=/new"}">${icon("plus", { size: 16 })}New topic</a>`,
+    })}
+    ${topicList(latest, { showCategory: true })}
+    ${pager("/", page, hasMore)}`;
 }
 
 export function categoryPage(category: Category, topics: TopicRow[], page: number, hasMore: boolean): Html {
   return html`
-    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Forum</a></nav>
-    <div class="page-head">
-      <div>
-        <h1>${category.name}</h1>
-        ${category.description ? html`<p class="lede">${category.description}</p>` : ""}
-      </div>
-      <a class="button button-accent" href="/new?category=${category.slug}">New topic</a>
-    </div>
+    ${mainHead({
+      title: category.name,
+      lede: category.description || undefined,
+      kicker: html`<p class="kicker">${categoryBadge(category)} · ${category.topic_count} ${category.topic_count === 1 ? "topic" : "topics"}</p>`,
+      action: html`<a class="button button-primary" href="/new?category=${category.slug}">${icon("plus", { size: 16 })}New topic</a>`,
+    })}
     ${topicList(topics, { showCategory: false })}
     ${pager(`/c/${category.slug}`, page, hasMore)}`;
 }
@@ -101,21 +114,13 @@ export interface RenderedPost {
 }
 
 const HEART = "❤️";
-const heartIcon = raw(
-  '<svg class="heart-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.4C1.4 7.6 3.6 4 7.1 4c2.1 0 3.6 1.2 4.9 3 1.3-1.8 2.8-3 4.9-3 3.5 0 5.7 3.6 4.4 7.1-1.8 4.8-9.3 9.4-9.3 9.4z"/></svg>',
-);
 
 function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | null): Html {
   const byEmoji = new Map(reactions.map((r) => [r.emoji, r]));
   const needsSignin = user ? "" : raw("data-needs-signin");
   const heart = byEmoji.get(HEART);
-  // The heart is the one-click "this helped" (as on Discourse); the other emoji sit behind "+ React".
+  // Emoji people used come first; the rest open from the smiley. The heart is the one-click "this helped" (as on Discourse).
   return html`<form class="reactions" method="post" action="/posts/${post.id}/react" data-reactions>
-    <button type="submit" name="emoji" value="${HEART}"
-      class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
-      aria-pressed="${heart?.mine ? "true" : "false"}" aria-label="Like" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
-      ${heartIcon}<span class="reaction-count">${heart ? heart.count : ""}</span>
-    </button>
     ${REACTIONS.filter((e) => e !== HEART).map((emoji) => {
       const r = byEmoji.get(emoji);
       const label = r ? `${r.names} reacted ${emoji}` : `React ${emoji}`;
@@ -125,6 +130,12 @@ function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | n
         <span class="emoji">${emoji}</span><span class="reaction-count">${r ? r.count : ""}</span>
       </button>`;
     })}
+    <button type="button" class="icon-button react-toggle" aria-label="Add a reaction" title="Add a reaction">${icon("smile-plus")}</button>
+    <button type="submit" name="emoji" value="${HEART}"
+      class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
+      aria-pressed="${heart?.mine ? "true" : "false"}" aria-label="Like" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
+      <span class="reaction-count">${heart ? heart.count : ""}</span>${icon("heart", { class: "heart-icon" })}
+    </button>
   </form>`;
 }
 
@@ -132,9 +143,9 @@ function fileCard(a: Attachment): Html {
   const kind = fileKind(a);
   const label = kind === "nodebox" ? "NodeBox project" : kind === "zip" ? "ZIP archive" : a.content_type;
   return html`<li><a class="file-card file-${kind}" href="${fileUrl(a)}" download>
-    <span class="file-icon" aria-hidden="true">${kind === "nodebox" ? "◆" : kind === "zip" ? "▤" : "▢"}</span>
+    <span class="file-icon">${icon(kind === "nodebox" ? "box" : kind === "zip" ? "file-archive" : "file", { size: 20 })}</span>
     <span class="file-text"><span class="file-name">${a.filename}</span><span class="file-meta">${label} · ${formatBytes(a.size)}</span></span>
-    <span class="file-dl" aria-hidden="true">↓</span>
+    <span class="file-dl">${icon("download", { size: 18 })}</span>
   </a></li>`;
 }
 
@@ -147,95 +158,108 @@ export function topicPage(
   const canSolve = user && (user.id === topic.user_id || user.is_admin);
   const isAdmin = Boolean(user?.is_admin);
   const here = opts.page > 1 ? `${topicUrl(topic)}?page=${opts.page}` : topicUrl(topic);
-  return html`
-    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Forum</a> <span aria-hidden="true">/</span> <a href="/c/${topic.category_slug}">${topic.category_name}</a></nav>
-    <div class="topic-head">
-      <h1>${topic.title}</h1>
-      <p class="topic-sub"><span class="muted">Started by ${topic.author_name} · ${topic.post_count - 1} ${topic.post_count - 1 === 1 ? "reply" : "replies"}</span>${topicBadges(topic)}${topic.tender_id ? html`<span class="badge badge-legacy" title="This topic was moved here from the old forum">From the old forum</span>` : ""}</p>
+  const replies = topic.post_count - 1;
+  return html`<div class="topic">
+    <header class="topic-head">
+      <p class="kicker">${categoryBadge({ id: topic.category_id, slug: topic.category_slug, name: topic.category_name })}${topic.tender_id
+        ? html`<span class="tag" title="This topic was moved here from the old forum">From the old forum</span>`
+        : ""}</p>
+      <h1>${statusIcons(topic)}<span>${topic.title}</span></h1>
+    </header>
+
+    <aside class="topic-aside" aria-label="About this topic">
+      <dl class="topic-facts">
+        <div><dt>Replies</dt><dd>${replies}</dd></div>
+        <div><dt>Started</dt><dd>${time(topic.created_at)}</dd></div>
+        <div><dt>Last reply</dt><dd>${replies > 0 ? time(topic.last_post_at) : "None yet"}</dd></div>
+      </dl>
       ${user ? watchForm(topic, opts.watching) : ""}
-    </div>
-    ${isAdmin ? topicModBar(topic) : ""}
+      ${canSolve
+        ? html`<form method="post" action="/t/${topic.id}/solved">
+            <button class="button button-quiet button-block" type="submit" name="solved" value="${topic.solved ? "0" : "1"}">${icon("circle-check", { size: 16 })}${topic.solved ? "Mark as not solved" : "Mark as solved"}</button>
+          </form>`
+        : ""}
+      ${!opts.hasMore && !topic.locked ? html`<a class="button button-primary button-block" href="${user ? "#reply" : `/signin?next=${encodeURIComponent(topicUrl(topic))}`}">${icon("reply", { size: 16 })}Reply</a>` : ""}
+      ${isAdmin ? topicModBar(topic) : ""}
+    </aside>
+
     <ol class="posts" start="${opts.firstIndex + 1}">
       ${posts.map(
         (p) => html`<li class="post${p.post.status !== "visible" ? " post-hidden" : ""}" id="post-${p.post.id}">
-          <header class="post-byline">
-            ${avatar({ id: p.post.user_id, name: p.post.author_name })}
-            <span class="post-author">${p.post.author_name}</span>
-            ${p.post.author_is_admin ? html`<span class="badge badge-team">NodeBox team</span>` : ""}
-            <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
-          </header>
-          <article class="post-body">
+          <div class="post-avatar">${avatar({ id: p.post.user_id, name: p.post.author_name })}</div>
+          <article class="post-main">
+            <header class="post-head">
+              <span class="post-author">${p.post.author_name}</span>
+              ${p.post.author_is_admin ? html`<span class="tag tag-team">NodeBox team</span>` : ""}
+              <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
+            </header>
             <div class="prose">${raw(p.html)}</div>
             ${p.images.length
               ? html`<ul class="gallery">${p.images.map((img) => html`<li><a href="${img.full}" target="_blank" rel="noopener"><img src="${img.thumb}" alt="${img.a.filename}" loading="lazy"></a></li>`)}</ul>`
               : ""}
             ${p.files.length ? html`<ul class="files">${p.files.map(fileCard)}</ul>` : ""}
-            <footer class="post-foot">
-              ${p.post.status === "visible" ? reactionBar(p.post, p.reactions, user) : html`<span></span>`}
+            <footer class="post-actions">
               ${isAdmin ? postModMenu(p.post, here) : ""}
+              ${p.post.status === "visible"
+                ? html`<a class="icon-button" href="#post-${p.post.id}" aria-label="Link to this post" title="Link to this post">${icon("link")}</a>
+                    ${reactionBar(p.post, p.reactions, user)}`
+                : ""}
             </footer>
           </article>
         </li>`,
       )}
     </ol>
-    ${pager(topicUrl(topic), opts.page, opts.hasMore)}
-    ${canSolve
-      ? html`<form method="post" action="/t/${topic.id}/solved" class="solve-form">
-          <button class="button button-quiet" type="submit" name="solved" value="${topic.solved ? "0" : "1"}">${topic.solved ? "Mark as not solved" : "✓ Mark as solved"}</button>
-        </form>`
-      : ""}
-    ${opts.hasMore
-      ? ""
-      : topic.locked
-        ? html`<p class="empty">This topic is locked.</p>`
-        : user
-          ? html`<section class="reply" aria-labelledby="reply-h">
-              <h2 id="reply-h" class="section-title">Your reply</h2>
-              ${composer({ action: `/t/${topic.id}/reply`, submitLabel: "Post reply" })}
-            </section>`
-          : html`<p class="signin-prompt"><a class="button button-accent" href="/signin?next=${encodeURIComponent(topicUrl(topic))}">Sign in to reply</a></p>`}`;
+
+    <div class="topic-foot">
+      ${pager(topicUrl(topic), opts.page, opts.hasMore)}
+      ${opts.hasMore
+        ? ""
+        : topic.locked
+          ? html`<p class="empty">${icon("lock", { size: 16 })} This topic is locked.</p>`
+          : user
+            ? html`<section class="reply" id="reply" aria-labelledby="reply-h">
+                <div class="post-avatar">${avatar(user)}</div>
+                <div class="post-main">
+                  <h2 id="reply-h" class="section-title">Your reply</h2>
+                  ${composer({ action: `/t/${topic.id}/reply`, submitLabel: "Post reply" })}
+                </div>
+              </section>`
+            : html`<p class="signin-prompt"><a class="button button-primary" href="/signin?next=${encodeURIComponent(topicUrl(topic))}">${icon("log-in", { size: 16 })}Sign in to reply</a></p>`}
+    </div>
+  </div>`;
 }
 
 function watchForm(topic: TopicRow, watching: boolean): Html {
   return html`<form method="post" action="/t/${topic.id}/watch" class="watch-form">
     <input type="hidden" name="watch" value="${watching ? "0" : "1"}">
-    <button type="submit" class="watch${watching ? " on" : ""}" aria-pressed="${watching ? "true" : "false"}">
-      <span class="watch-mark" aria-hidden="true"></span>${watching ? "Watching" : "Watch"}
+    <button type="submit" class="button button-quiet button-block watch${watching ? " on" : ""}" aria-pressed="${watching ? "true" : "false"}">
+      ${icon(watching ? "eye" : "eye-off", { size: 16 })}${watching ? "Watching" : "Watch"}
     </button>
-    <span class="hint">${watching ? "You get an email digest when people reply." : "Get an email digest when people reply."}</span>
+    <p class="hint">${watching ? "You get an email digest when people reply." : "Get an email digest when people reply."}</p>
   </form>`;
 }
 
 export function yourTopicsPage(topics: YourThread[], digest: boolean): Html {
   return html`
-    <header class="page-head">
-      <p class="eyebrow">Following</p>
-      <h1>Your topics</h1>
-      <p class="lede">Topics you started, replied to or watch. ${digest
-        ? html`New replies in watched topics reach you as one email a day at most.`
-        : html`Email digests are off; turn them on in <a href="/settings">Settings</a>.`}</p>
-    </header>
+    ${mainHead({
+      title: "Your topics",
+      lede: digest
+        ? html`Topics you started, replied to or watch. New replies in watched topics reach you as one email a day at most.`
+        : html`Topics you started, replied to or watch. Email digests are off; turn them on in <a href="/settings">Settings</a>.`,
+    })}
     ${topics.length === 0
       ? html`<p class="empty">Nothing here yet. Start a topic or reply to one and it shows up here.</p>`
-      : html`<ol class="topic-list">
-          ${topics.map(
-            (t) => html`<li class="topic-item${t.new_posts > 0 ? " unread" : ""}">
-              <div class="topic-main">
-                <a class="topic-title" href="${t.new_posts > 0 ? `/t/${t.id}/unread` : topicUrl(t)}">${t.title}</a>
-                <div class="topic-meta">
-                  ${t.new_posts > 0 ? html`<span class="badge badge-new">${t.new_posts} new</span>` : ""}
-                  <a class="chip" href="/c/${t.category_slug}">${t.category_name}</a>
-                  <span>${t.started ? "You started this" : "You replied"}</span>
-                  ${t.watching ? html`<span class="watching-mark">Watching</span>` : ""}
-                </div>
-              </div>
-              <div class="topic-stats">
-                <span class="replies"><span class="count">${t.post_count - 1}</span><span class="replies-label">${t.post_count - 1 === 1 ? "reply" : "replies"}</span></span>
-                <span class="activity">${time(t.last_post_at)}</span>
-              </div>
-            </li>`,
-          )}
-        </ol>`}`;
+      : topicTable(
+          topics,
+          {
+            showCategory: true,
+            href: (t) => (t.new_posts > 0 ? `/t/${t.id}/unread` : topicUrl(t)),
+            unread: (t) => t.new_posts > 0,
+            meta: (t) => html`${t.new_posts > 0 ? html`<span class="tag tag-new">${t.new_posts} new</span>` : ""}
+              <span>${t.started ? "You started this" : "You replied"}</span>
+              ${t.watching ? html`<span class="watching-mark">${icon("eye", { size: 14 })}Watching</span>` : ""}`,
+          },
+        )}`;
 }
 
 export function composer(opts: { action: string; submitLabel: string; body?: string; titleField?: Html; error?: string }): Html {
@@ -255,14 +279,14 @@ export function composer(opts: { action: string; submitLabel: string; body?: str
       <div class="editor-foot">
         <label class="attach">
           <input type="file" multiple data-file-input>
-          <span>📎 Attach files</span>
+          <span>${icon("paperclip", { size: 16 })}Attach files</span>
         </label>
         <span class="hint">Markdown works: **bold**, \`code\`, [links](https://…). Up to 50 MB per file.</span>
       </div>
       <div class="drop-overlay" aria-hidden="true"><span>Drop files to attach</span></div>
     </div>
     <div class="composer-actions">
-      <button class="button button-accent" type="submit">${opts.submitLabel}</button>
+      <button class="button button-primary" type="submit">${opts.submitLabel}</button>
     </div>
   </form>`;
 }
@@ -278,7 +302,7 @@ export function newTopicPage(categories: Category[], selected: string | undefine
         ${categories.map((c) => html`<option value="${c.slug}" ${c.slug === selected ? "selected" : ""}>${c.name}</option>`)}
       </select>
     </div>`;
-  return html`<h1>New topic</h1>
+  return html`${mainHead({ title: "New topic" })}
     ${composer({ action: "/new", submitLabel: "Post topic", body: values.body, titleField, error: values.error })}`;
 }
 
@@ -299,7 +323,7 @@ export function signInPage(opts: { next: string; google: boolean; error?: string
         <label for="email">Email address</label>
         <input id="email" name="email" type="email" required autocomplete="email" value="${opts.email ?? ""}" placeholder="you@example.com">
       </div>
-      <button class="button ${opts.google ? "button-quiet" : "button-accent"}" type="submit">Email me a sign-in link</button>
+      <button class="button ${opts.google ? "button-quiet" : "button-primary"}" type="submit">Email me a sign-in link</button>
     </form>
     <div class="callout">
       <strong>Coming from the old forum?</strong>
@@ -323,7 +347,7 @@ export function confirmSignInPage(email: string, token: string): Html {
     <p class="lede">Continue as <strong>${email}</strong>?</p>
     <form method="post" action="/signin/verify">
       <input type="hidden" name="token" value="${token}">
-      <button class="button button-accent" type="submit">Sign in</button>
+      <button class="button button-primary" type="submit">Sign in</button>
     </form>
   </div>`;
 }
@@ -356,7 +380,7 @@ export function profileForm(opts: {
               <input type="checkbox" name="email_digest" value="1" ${opts.digest ? "checked" : ""}>
               <span><strong>Email me about new replies</strong><br><span class="hint">In topics you started or watch. One email a day at most, listing every topic with news.</span></span>
             </label>`}
-      <button class="button button-accent" type="submit">${opts.submit}</button>
+      <button class="button button-primary" type="submit">${opts.submit}</button>
     </form>
   </div>`;
 }
@@ -365,7 +389,7 @@ export function messagePage(heading: string, message: string | Html, action?: { 
   return html`<div class="auth-card">
     <h1>${heading}</h1>
     <p class="lede">${message}</p>
-    ${action ? html`<a class="button button-accent" href="${action.href}">${action.label}</a>` : ""}
+    ${action ? html`<a class="button button-primary" href="${action.href}">${action.label}</a>` : ""}
   </div>`;
 }
 

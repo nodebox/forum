@@ -4,6 +4,7 @@ import { excerpt } from "../markdown.ts";
 import { REMOVAL_REASONS, type AdminUserRow, type LogRow, type QueueItem } from "../moderation.ts";
 import { timeAgo } from "../util.ts";
 import type { Html } from "./layout.ts";
+import { icon } from "./icons.ts";
 
 const STATUS_LABEL = { spam: "Marked as spam", removed: "Removed", visible: "" } as const;
 
@@ -11,7 +12,7 @@ const STATUS_LABEL = { spam: "Marked as spam", removed: "Removed", visible: "" }
 export function postModMenu(post: PostRow, returnTo: string): Html {
   if (post.status !== "visible") {
     return html`<div class="mod-hidden">
-      <span class="badge badge-danger">${STATUS_LABEL[post.status]}</span>
+      <span class="tag tag-danger">${STATUS_LABEL[post.status]}</span>
       ${post.moderation_reason ? html`<span class="muted small">${post.moderation_reason}</span>` : ""}
       <form method="post" action="/admin/posts/${post.id}">
         <input type="hidden" name="return" value="${returnTo}">
@@ -20,7 +21,7 @@ export function postModMenu(post: PostRow, returnTo: string): Html {
     </div>`;
   }
   return html`<details class="mod-menu">
-    <summary class="button button-small button-quiet">Moderate</summary>
+    <summary class="icon-button" aria-label="Moderate" title="Moderate">${icon("shield")}</summary>
     <div class="mod-panel">
       <form method="post" action="/admin/posts/${post.id}" class="stack-sm">
         <input type="hidden" name="return" value="${returnTo}">
@@ -39,12 +40,12 @@ export function postModMenu(post: PostRow, returnTo: string): Html {
 
 export function topicModBar(topic: TopicRow): Html {
   return html`<div class="mod-bar">
-    <span class="muted small">Admin:</span>
+    <p class="side-head">${icon("shield", { size: 14 })}Moderation</p>
     <form method="post" action="/admin/topics/${topic.id}">
-      <button class="button button-small button-quiet" name="action" value="${topic.pinned ? "unpin" : "pin"}">${topic.pinned ? "Unpin" : "Pin"}</button>
-      <button class="button button-small button-quiet" name="action" value="${topic.locked ? "unlock" : "lock"}">${topic.locked ? "Unlock" : "Lock"}</button>
+      <button class="button button-small button-quiet" name="action" value="${topic.pinned ? "unpin" : "pin"}">${icon("pin", { size: 14 })}${topic.pinned ? "Unpin" : "Pin"}</button>
+      <button class="button button-small button-quiet" name="action" value="${topic.locked ? "unlock" : "lock"}">${icon("lock", { size: 14 })}${topic.locked ? "Unlock" : "Lock"}</button>
     </form>
-    ${topic.status !== "visible" ? html`<span class="badge badge-danger">Hidden topic: ${STATUS_LABEL[topic.status]}</span>` : ""}
+    ${topic.status !== "visible" ? html`<span class="tag tag-danger">Hidden topic: ${STATUS_LABEL[topic.status]}</span>` : ""}
   </div>`;
 }
 
@@ -64,7 +65,7 @@ function queueMeta(i: QueueItem, view: "spam" | "removed"): string {
 }
 
 export function queuePage(view: "spam" | "removed", items: QueueItem[]): Html {
-  return html`<h1>Moderation</h1>
+  return html`<header class="main-head"><div class="main-head-text"><h1>Moderation</h1></div></header>
     ${tabs(view)}
     <p class="muted">${view === "spam"
       ? "Posts marked as spam, by an admin or by the spam filter during the import. They are hidden from everyone but admins. Restore anything that was caught by mistake."
@@ -89,7 +90,7 @@ export function queuePage(view: "spam" | "removed", items: QueueItem[]): Html {
 }
 
 export function usersPage(q: string, users: AdminUserRow[], selfId: number): Html {
-  return html`<h1>Moderation</h1>
+  return html`<header class="main-head"><div class="main-head-text"><h1>Moderation</h1></div></header>
     ${tabs("users")}
     <form method="get" action="/admin/users" class="search-row">
       <label class="visually-hidden" for="q">Find people</label>
@@ -107,7 +108,7 @@ export function usersPage(q: string, users: AdminUserRow[], selfId: number): Htm
                 <td>${u.name}${u.tender_id ? html` <span class="muted small">(old forum)</span>` : ""}</td>
                 <td class="small">${u.email ?? "—"}</td>
                 <td>${u.post_count}</td>
-                <td>${u.is_admin ? html`<span class="badge badge-team">Admin</span>` : ""}${u.banned_at ? html`<span class="badge badge-danger">Banned</span>` : ""}</td>
+                <td>${u.is_admin ? html`<span class="tag tag-team">Admin</span>` : ""}${u.banned_at ? html`<span class="tag tag-danger">Banned</span>` : ""}</td>
                 <td class="row-actions">
                   ${u.id === selfId
                     ? html`<span class="muted small">You</span>`
@@ -142,7 +143,7 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 export function logPage(rows: LogRow[]): Html {
-  return html`<h1>Moderation</h1>
+  return html`<header class="main-head"><div class="main-head-text"><h1>Moderation</h1></div></header>
     ${tabs("log")}
     ${rows.length === 0
       ? html`<p class="empty">No moderation yet.</p>`

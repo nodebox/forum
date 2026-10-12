@@ -20,6 +20,7 @@ import {
   toggleReaction,
   topicPosts,
   type Attachment,
+  type Category,
 } from "./db.ts";
 import { markSeen, setWatching, topicUserState, yourThreads } from "./notifications.ts";
 import {
@@ -78,8 +79,17 @@ app.use(async (c, next) => {
   await next();
 });
 
-function page(c: Context<AppEnv>, content: Html, opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 429; mainClass?: string } = {}) {
+// The sidebar lists categories on every page; they rarely change, so each isolate keeps them for a minute.
+let categoryCache: { at: number; list: Category[] } | null = null;
+async function sidebarCategories(db: D1Database): Promise<Category[]> {
+  if (categoryCache && Date.now() - categoryCache.at < 60_000) return categoryCache.list;
+  categoryCache = { at: Date.now(), list: await listCategories(db) };
+  return categoryCache.list;
+}
+
+async function page(c: Context<AppEnv>, content: Html, opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 429; mainClass?: string } = {}) {
   const url = new URL(c.req.url);
+  const categories = await sidebarCategories(c.env.DB);
   return c.html(
     layout(
       {
@@ -90,6 +100,7 @@ function page(c: Context<AppEnv>, content: Html, opts: { title?: string; descrip
         showBanner: getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
         path: url.pathname + url.search,
         siteName: c.env.SITE_NAME,
+        categories,
         mainClass: opts.mainClass,
       },
       content,

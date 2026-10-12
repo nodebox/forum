@@ -26,6 +26,7 @@
     "@types/markdown-it": "14.2.0",
     "@types/node": "^22.19.0",
     "esbuild": "0.28.2",
+    "lucide-static": "1.55.0",
     "typescript": "5.9.3",
     "wrangler": "4.149.0"
   }

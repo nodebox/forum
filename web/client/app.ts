@@ -223,3 +223,11 @@ document.addEventListener("click", async (e) => {
     $(".reaction-count", b)!.textContent = r ? String(r.count) : "";
   }
 });
+
+// --- Sidebar on small screens -------------------------------------------------
+
+const navToggle = $<HTMLButtonElement>("[data-nav-toggle]");
+navToggle?.addEventListener("click", () => {
+  const open = document.body.classList.toggle("nav-open");
+  navToggle.setAttribute("aria-expanded", String(open));
+});

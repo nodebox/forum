@@ -146,7 +146,7 @@ test("watching, grouped digests, hearts, your topics", async () => {
   const [t1, t2] = topics.map((t) => Number(/\/t\/(\d+)/.exec(t)![1]));
 
   // Starting a topic watches it.
-  assert.match(await (await req(topics[0]!, { cookie: ann })).text(), /aria-pressed="true">\s*<span class="watch-mark"[^>]*><\/span>Watching/);
+  assert.match(await (await req(topics[0]!, { cookie: ann })).text(), /class="button button-quiet button-block watch on" aria-pressed="true">[\s\S]*?Watching\s*<\/button>/);
   // Nothing new yet, so no digest.
   await sendDigests(mailEnv);
   assert.equal(sent.filter((m) => m.to === "ann@example.com").length, 0);

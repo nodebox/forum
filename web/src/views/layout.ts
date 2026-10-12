@@ -57,11 +57,13 @@ export function layout(props: LayoutProps, content: Html): Html {
       <a class="brand" href="/">${logo}<span class="brand-word">NodeBox</span><span class="brand-sub">Forum</span></a>
       <nav class="header-nav" aria-label="Main">
         ${props.user
-          ? html`<a class="button button-accent" href="/new">New topic</a>
+          ? html`<a class="header-link" href="/topics/mine">Your topics</a>
+              <a class="button button-accent" href="/new">New topic</a>
               <details class="user-menu">
                 <summary aria-label="Account">${avatar(props.user, "sm")}<span class="user-menu-name">${props.user.name}</span></summary>
                 <div class="user-menu-panel">
                   <p class="muted small">Signed in as<br>${props.user.email}</p>
+                  <a href="/topics/mine">Your topics</a>
                   <a href="/settings">Settings</a>
                   ${props.user.is_admin ? html`<a href="/admin">Moderation</a>` : ""}
                   <form method="post" action="/signout"><button type="submit" class="linklike">Sign out</button></form>

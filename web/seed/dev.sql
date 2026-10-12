@@ -48,6 +48,14 @@ Happy to share the project if anyone wants to dig in.', '2026-10-10T14:00:00Z', 
 INSERT INTO reactions (post_id, user_id, emoji, created_at) VALUES
  (2, 3, '❤️', '2026-10-11T10:30:00Z'), (2, 3, '👍', '2026-10-11T10:30:00Z'), (2, 4, '👍', '2026-10-11T11:30:00Z'),
  (4, 2, '🎉', '2026-10-11T11:30:00Z'), (4, 1, '🎉', '2026-10-11T11:31:00Z'), (4, 3, '❤️', '2026-10-11T11:32:00Z'),
- (8, 2, '👍', '2014-05-03T13:00:00Z');
+ (8, 2, '👍', '2014-05-03T13:00:00Z'),
+ (2, 4, '❤️', '2026-10-11T12:00:00Z'), (2, 2, '❤️', '2026-10-11T12:10:00Z'), (3, 1, '❤️', '2026-10-12T09:00:00Z'),
+ (4, 1, '❤️', '2026-10-11T11:33:00Z'), (6, 3, '❤️', '2026-10-02T09:00:00Z');
 
 INSERT INTO legacy_redirects (path, topic_id) VALUES ('/discussions/problems/4711-import-svg-crashes-on-files-with-gradients', 4);
+
+-- Frederik watches the topics he answered; he hasn't seen the latest replies yet.
+INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES
+ (1, 1, 1, '2026-10-11T10:02:00Z'),
+ (1, 2, 1, '2026-10-11T12:00:00Z'),
+ (1, 4, NULL, '2014-05-03T12:00:00Z');

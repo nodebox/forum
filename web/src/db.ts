@@ -9,6 +9,7 @@ export interface User {
   created_at: string;
   tender_id: number | null;
   claimed_at: string | null;
+  email_digest: number;
 }
 
 export type PostStatus = "visible" | "spam" | "removed";
@@ -183,6 +184,10 @@ export async function createTopic(
     .first<{ id: number }>();
   await db.batch([
     db.prepare("UPDATE categories SET topic_count = topic_count + 1 WHERE id = ?").bind(input.categoryId),
+    // People who start a topic watch it, so they hear about replies.
+    db
+      .prepare("INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?) ON CONFLICT DO UPDATE SET watching = 1")
+      .bind(input.userId, topicId, t),
     ...claimAttachments(db, post!.id, input.userId, input.attachmentIds),
   ]);
   return { topicId, postId: post!.id };
@@ -201,6 +206,13 @@ export async function createReply(
     db
       .prepare("UPDATE topics SET post_count = post_count + 1, last_post_at = ?, last_post_user_id = ? WHERE id = ?")
       .bind(t, input.userId, input.topicId),
+    // Replying watches the topic, unless the person turned watching off for it before.
+    db
+      .prepare(
+        `INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?)
+         ON CONFLICT DO UPDATE SET watching = coalesce(watching, 1), last_seen_at = excluded.last_seen_at`,
+      )
+      .bind(input.userId, input.topicId, t),
     ...claimAttachments(db, post!.id, input.userId, input.attachmentIds),
   ]);
   return post!.id;

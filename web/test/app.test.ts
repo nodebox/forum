@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { getPlatformProxy } from "wrangler";
 import { app } from "../src/app.ts";
+import { sendDigests } from "../src/notifications.ts";
 
 const persist = fs.mkdtempSync(path.join(os.tmpdir(), "forum-test-"));
 let proxy: Awaited<ReturnType<typeof getPlatformProxy>>;
@@ -14,8 +15,11 @@ let env: any;
 before(async () => {
   proxy = await getPlatformProxy({ persist: { path: persist } });
   env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost" };
-  const schema = fs.readFileSync(path.join(import.meta.dirname, "../migrations/0001_init.sql"), "utf8");
-  for (const stmt of schema.split(/;\s*\n/).map((s) => s.replace(/--.*$/gm, "").trim()).filter(Boolean)) await env.DB.prepare(stmt).run();
+  const dir = path.join(import.meta.dirname, "../migrations");
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    const schema = fs.readFileSync(path.join(dir, file), "utf8");
+    for (const stmt of schema.split(/;\s*\n/).map((s) => s.replace(/--.*$/gm, "").trim()).filter(Boolean)) await env.DB.prepare(stmt).run();
+  }
   await env.DB.prepare("INSERT INTO categories (id, slug, name) VALUES (1, 'questions', 'Questions')").run();
 });
 after(async () => {
@@ -127,4 +131,71 @@ test("legacy URLs redirect", async () => {
   const res = await req("/discussions/problems/4711-old/");
   assert.equal(res.status, 301);
   assert.equal(res.headers.get("location"), "/t/4711/old");
+});
+
+test("watching, grouped digests, hearts, your topics", async () => {
+  const sent: any[] = [];
+  const mailEnv = { ...env, MAILER: "cloudflare", EMAIL: { send: async (m: any) => void sent.push(m) } };
+  const ann = await signIn("ann@example.com");
+  const bob = await signIn("bob@example.com");
+  const topics: string[] = [];
+  for (const title of ["First question", "Second question"]) {
+    const res = await req("/new", { method: "POST", cookie: ann, body: form({ title, category: "questions", body: "Help?" }) });
+    topics.push(res.headers.get("location")!);
+  }
+  const [t1, t2] = topics.map((t) => Number(/\/t\/(\d+)/.exec(t)![1]));
+
+  // Starting a topic watches it.
+  assert.match(await (await req(topics[0]!, { cookie: ann })).text(), /aria-pressed="true">\s*<span class="watch-mark"[^>]*><\/span>Watching/);
+  // Nothing new yet, so no digest.
+  await sendDigests(mailEnv);
+  assert.equal(sent.filter((m) => m.to === "ann@example.com").length, 0);
+
+  // Bob replies in both; Ann gets one email naming both topics.
+  await req(`/t/${t1}/reply`, { method: "POST", cookie: bob, body: form({ body: "Try this" }) });
+  await req(`/t/${t2}/reply`, { method: "POST", cookie: bob, body: form({ body: "And this" }) });
+  await sendDigests(mailEnv);
+  const forAnn = sent.filter((m) => m.to === "ann@example.com");
+  assert.equal(forAnn.length, 1);
+  assert.match(forAnn[0].subject, /2 new replies in 2 topics/);
+  assert.match(forAnn[0].text, /First question[\s\S]*Second question|Second question[\s\S]*First question/);
+  assert.match(forAnn[0].headers["List-Unsubscribe"], /\/unsubscribe\?u=\d+&t=/);
+  // Bob replied, so he watches too, but his own posts don't count as news.
+  assert.equal(sent.filter((m) => m.to === "bob@example.com").length, 0);
+
+  // At most one digest a day: another reply waits.
+  await req(`/t/${t1}/reply`, { method: "POST", cookie: bob, body: form({ body: "One more" }) });
+  sent.length = 0;
+  await sendDigests(mailEnv);
+  assert.equal(sent.length, 0);
+
+  // Your topics shows the unread count; opening the topic clears it.
+  let mine = await (await req("/topics/mine", { cookie: ann })).text();
+  assert.match(mine, /First question/);
+  assert.match(mine, /1 new/);
+  const unread = await req(`/t/${t1}/unread`, { cookie: ann });
+  assert.match(unread.headers.get("location")!, /#post-\d+$/);
+  await req(topics[0]!, { cookie: ann });
+  mine = await (await req("/topics/mine", { cookie: ann })).text();
+  assert.doesNotMatch(mine.split("Second question")[0]!, /\d+ new/);
+
+  // Unwatching sticks, even after replying again.
+  await req(`/t/${t1}/watch`, { method: "POST", cookie: bob, body: form({ watch: "0" }) });
+  await req(`/t/${t1}/reply`, { method: "POST", cookie: bob, body: form({ body: "Last one" }) });
+  const state = await env.DB.prepare("SELECT tu.watching FROM topic_users tu JOIN users u ON u.id = tu.user_id WHERE u.email = 'bob@example.com' AND tu.topic_id = ?").bind(t1).first();
+  assert.equal(state.watching, 0);
+
+  // The unsubscribe link turns digests off without signing in.
+  const link = new URL(forAnn[0].headers["List-Unsubscribe"].slice(1, -1));
+  assert.equal((await app.request(ORIGIN + link.pathname + link.search, { method: "POST" }, env)).status, 200);
+  const ann2 = await env.DB.prepare("SELECT email_digest FROM users WHERE email = 'ann@example.com'").first();
+  assert.equal(ann2.email_digest, 0);
+  assert.equal((await req("/unsubscribe?u=1&t=wrong")).status, 404);
+
+  // Hearts: one click, shown on every post.
+  const firstPost = /id="post-(\d+)"/.exec(await (await req(topics[1]!)).text())![1];
+  const r = await (await req(`/posts/${firstPost}/react`, { method: "POST", cookie: bob, body: form({ emoji: "❤️" }), headers: { Accept: "application/json" } })).json() as any;
+  assert.deepEqual(r.reactions.map((x: any) => [x.emoji, x.count, x.mine]), [["❤️", 1, true]]);
+  const page = await (await req(topics[1]!, { cookie: bob })).text();
+  assert.match(page, /class="reaction heart has mine"/);
 });

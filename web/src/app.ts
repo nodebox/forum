@@ -21,6 +21,7 @@ import {
   topicPosts,
   type Attachment,
 } from "./db.ts";
+import { markSeen, setWatching, topicUserState, yourThreads } from "./notifications.ts";
 import {
   consumeLoginToken,
   createLoginToken,
@@ -52,6 +53,7 @@ import {
   messagePage,
   newTopicPage,
   profileForm,
+  yourTopicsPage,
   signInPage,
   topicPage,
   topicUrl,
@@ -67,7 +69,9 @@ export const app = new Hono<AppEnv>();
 app.use(secureHeaders({ crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false }));
 // Rejects cross-site form posts by checking the Origin header; with SameSite=Lax
 // session cookies this is the CSRF protection.
-app.use(csrf());
+// Mail providers POST one-click unsubscribes (RFC 8058) from their own origin; the token is the check there.
+const checkOrigin = csrf();
+app.use((c, next) => (c.req.path === "/unsubscribe" ? next() : checkOrigin(c, next)));
 app.use(async (c, next) => {
   c.set("user", await currentUser(c));
   c.set("notice", null);
@@ -157,10 +161,12 @@ async function showTopic(c: Context<AppEnv>) {
   const shown = posts.slice(0, POSTS_PER_PAGE);
   if (shown.length === 0 && p > 1) return c.notFound();
   const ids = shown.map((x) => x.id);
-  const [attachments, reactions] = await Promise.all([
+  const [attachments, reactions, state] = await Promise.all([
     attachmentsForPosts(c.env.DB, ids),
     reactionsForPosts(c.env.DB, ids, user?.id ?? null),
+    user ? topicUserState(c.env.DB, user.id, topic.id) : null,
   ]);
+  if (user) await markSeen(c.env.DB, user.id, topic.id);
   const byId = new Map(attachments.map((a) => [a.id, a]));
   const image = (a: Attachment) => {
     const u = imageUrls(c.env, a);
@@ -178,11 +184,25 @@ async function showTopic(c: Context<AppEnv>) {
       reactions: reactions.filter((r) => r.post_id === post.id),
     };
   });
-  return page(c, topicPage(topic, rendered, user, { page: p, hasMore, firstIndex: (p - 1) * POSTS_PER_PAGE }), {
+  return page(c, topicPage(topic, rendered, user, { page: p, hasMore, firstIndex: (p - 1) * POSTS_PER_PAGE, watching: Boolean(state?.watching) }), {
     title: topic.title,
     description: shown[0] ? excerpt(shown[0].body) : undefined,
   });
 }
+// "N new" links from Your topics land on the first post the reader hasn't seen.
+app.get("/t/:id/unread", async (c) => {
+  const user = c.get("user");
+  const topic = await getTopic(c.env.DB, Number(c.req.param("id")));
+  if (!topic) return c.notFound();
+  if (!user) return c.redirect(topicUrl(topic));
+  const state = await topicUserState(c.env.DB, user.id, topic.id);
+  const first = await c.env.DB.prepare(
+    "SELECT id FROM posts WHERE topic_id = ? AND status = 'visible' AND created_at > ? ORDER BY created_at, id LIMIT 1",
+  )
+    .bind(topic.id, state?.last_seen_at ?? "")
+    .first<{ id: number }>();
+  return c.redirect(first ? await postLink(c, topic, first.id) : topicUrl(topic));
+});
 app.get("/t/:id/:slug", showTopic);
 app.get("/t/:id", showTopic);
 
@@ -254,6 +274,23 @@ app.post("/t/:id/solved", async (c) => {
   const form = await c.req.parseBody();
   await c.env.DB.prepare("UPDATE topics SET solved = ? WHERE id = ?").bind(form["solved"] === "1" ? 1 : 0, topic.id).run();
   return c.redirect(topicUrl(topic));
+});
+
+app.post("/t/:id/watch", async (c) => {
+  const { user, redirect } = requireUser(c);
+  if (redirect) return redirect;
+  const topic = await getTopic(c.env.DB, Number(c.req.param("id")));
+  if (!topic) return c.notFound();
+  const form = await c.req.parseBody();
+  await setWatching(c.env.DB, user.id, topic.id, form["watch"] === "1");
+  return c.redirect(topicUrl(topic));
+});
+
+app.get("/topics/mine", async (c) => {
+  const { user, redirect } = requireUser(c);
+  if (redirect) return redirect;
+  const topics = await yourThreads(c.env.DB, user.id);
+  return page(c, yourTopicsPage(topics, Boolean(user.email_digest)), { title: "Your topics" });
 });
 
 app.post("/posts/:id/react", async (c) => {
@@ -437,7 +474,7 @@ app.get("/welcome", (c) => {
 app.get("/settings", (c) => {
   const { user, redirect } = requireUser(c);
   if (redirect) return redirect;
-  return page(c, profileForm({ heading: "Settings", intro: `Signed in as ${user.email}.`, name: user.name, next: "/settings?notice=saved", submit: "Save" }), {
+  return page(c, profileForm({ heading: "Settings", intro: `Signed in as ${user.email}.`, name: user.name, next: "/settings?notice=saved", submit: "Save", digest: Boolean(user.email_digest) }), {
     title: "Settings",
     mainClass: "narrow",
   });
@@ -452,9 +489,29 @@ app.post("/settings", async (c) => {
   if (name.length < 2) {
     return page(c, profileForm({ heading: "Settings", intro: "", name, next, submit: "Save", error: "Use at least two characters." }), { status: 400, mainClass: "narrow" });
   }
-  await c.env.DB.prepare("UPDATE users SET name = ? WHERE id = ?").bind(name, user.id).run();
+  const digest = form["has_digest"] ? (form["email_digest"] === "1" ? 1 : 0) : user.email_digest;
+  await c.env.DB.prepare("UPDATE users SET name = ?, email_digest = ? WHERE id = ?").bind(name, digest, user.id).run();
   return c.redirect(next);
 });
+
+// One-click unsubscribe from digest emails (the link in every digest, and List-Unsubscribe).
+async function unsubscribe(c: Context<AppEnv>) {
+  const id = Number(c.req.query("u"));
+  const token = c.req.query("t") ?? "";
+  const ok =
+    token.length > 0 &&
+    (await c.env.DB.prepare("UPDATE users SET email_digest = 0 WHERE id = ? AND unsubscribe_token = ?").bind(id, token).run()).meta.changes > 0;
+  if (c.req.method === "POST") return c.body(null, ok ? 200 : 404);
+  return page(
+    c,
+    ok
+      ? messagePage("You won't get these emails any more", "No more reply digests. You can turn them back on in Settings.", { href: "/settings", label: "Settings" })
+      : messagePage("That link didn't work", "Sign in and change your email setting in Settings instead.", { href: "/settings", label: "Settings" }),
+    { title: "Email digests", mainClass: "narrow", status: ok ? 200 : 404 },
+  );
+}
+app.get("/unsubscribe", unsubscribe);
+app.post("/unsubscribe", unsubscribe);
 
 app.post("/signout", async (c) => {
   await endSession(c);

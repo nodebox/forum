@@ -218,7 +218,8 @@ document.addEventListener("click", async (e) => {
     b.classList.toggle("has", Boolean(r));
     b.classList.toggle("mine", Boolean(r?.mine));
     b.setAttribute("aria-pressed", String(Boolean(r?.mine)));
-    b.title = r ? `${r.names} reacted ${b.value}` : `React ${b.value}`;
+    const heart = b.classList.contains("heart");
+    b.title = r ? `${r.names} ${heart ? "liked this" : `reacted ${b.value}`}` : heart ? "Like this post" : `React ${b.value}`;
     $(".reaction-count", b)!.textContent = r ? String(r.count) : "";
   }
 });

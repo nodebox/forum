@@ -14,6 +14,8 @@
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "nodebox-forum" }
   ],
+  // Hourly: send grouped reply digests (src/notifications.ts).
+  "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     "SITE_NAME": "NodeBox Forum",
     // Absolute origin, used in sign-in emails and the Google redirect URI.

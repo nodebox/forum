@@ -48,8 +48,8 @@ them and would otherwise use up the single-use token.
   `wrangler secret put GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 - **Decided:** sign-in links go out through Cloudflare Email Sending (a
   `send_email` binding). The sending domain has to be onboarded in the
-  Cloudflare dashboard. Email is used for sign-in links only: no notification
-  emails and no reply-by-email. People read and reply on the forum.
+  Cloudflare dashboard. Email carries sign-in links and grouped reply digests
+  (section 4c). No reply-by-email: people read and reply on the forum.
 - Bot protection on the sign-in form: Cloudflare Turnstile (a site key and a
   secret). Without it, the magic-link form is an open relay for sending email
   to arbitrary addresses. The form already rate-limits per address.
@@ -120,12 +120,13 @@ Pages: home (categories and latest topics), category, topic, new topic, sign
 in, profile/settings, search.
 
 Kept out on purpose: tags, signatures, private messages, ranks, badges,
-polls, subscriptions per category, rich-text toolbar. Posts are Markdown with a
+polls, category subscriptions, rich-text toolbar. Posts are Markdown with a
 Write/Preview toggle and a one-line hint.
 
-Reactions: six fixed emoji (👍 ❤️ 😄 🎉 🤔 👀), one click to add, one to
-remove, counts with the names of who reacted on hover. A fixed set keeps the
-row tidy and saves an emoji picker.
+Hearts and reactions: every post has a heart, always visible, one click to
+like (as on Discourse). Five more emoji (👍 😄 🎉 🤔 👀) sit behind "+ React"
+and only show once someone used them. Counts carry the names of who reacted
+on hover. A fixed set keeps the row tidy and saves an emoji picker.
 
 Type: Atkinson Hyperlegible Next for text, Atkinson Hyperlegible Mono for code,
 self-hosted (no Google Fonts requests, which also avoids the GDPR question of
@@ -134,9 +135,14 @@ measure for post text.
 
 Colour (**Decided**): NodeBox navy `#041a32` for the header, text and primary
 buttons, a lighter navy-hued blue (`#1f5c99`) for links, navy-tinted neutrals,
-and a complementary orange (`#f7932f`, with navy text on it at 7.6:1) as the
-single accent for calls to action and the "new forum" banner. Light and dark
-mode follow the system setting; in dark mode the navy becomes the page.
+and a muted copper (`#b8703d`) used only for small marks: rules, the eyebrow
+dash, the "watching" square, the focus ring. It never carries text or fills a
+button. A filled heart is the one other colour. Light and dark mode follow the
+system setting; in dark mode the navy becomes the page.
+
+Design (**Decided**, after the first version was too soft): editorial and
+square. Large, tight headlines in the variable Atkinson Hyperlegible Next
+(weight 800), hairline rules instead of rounded cards, 2 px corners at most.
 
 "This is a new forum" is said three times: a dismissible orange banner on every
 page for the first weeks, a short note on the sign-in page ("Had an account on
@@ -174,6 +180,24 @@ The acceptable use policy is a short page at `/aup` with six rules; each
 removal reason in the Moderate menu is one of them. It was written for this
 forum, not copied, and hasn't had a legal review. Its contact address
 (`info@nodebox.net`) needs checking.
+
+## 4c. Following topics and email digests
+
+**Decided (Frederik, 2026-10-12):**
+
+- Starting a topic watches it. Replying watches it too, unless you switched
+  watching off for that topic before. A Watch/Watching button on every topic
+  toggles it.
+- Email is grouped: an hourly job sends each person at most one digest per
+  ~20 hours, listing every watched topic with replies from others they haven't
+  seen ("2 new replies in 2 topics you follow"). Opening a topic counts as
+  seeing it.
+- Digests can be switched off in Settings or with the one-click link in every
+  digest (also sent as `List-Unsubscribe` for mail clients).
+- "Your topics" (`/topics/mine`) lists what you started, replied to or watch,
+  with "N new" counts that jump to the first unread post.
+- Imported Tender topics start with nobody watching, so the import never
+  triggers mail to old users.
 
 ## 5. Launch and cutover
 
@@ -214,4 +238,4 @@ data came over from Tender.
 6. Search, profile page, moderation tools.
 7. Attachment uploader script, legacy redirects, staging deploy.
 
-Steps 1 to 5, plus moderation, are built, in `web/`, on the `claude/forum-app-cirr7p` branch.
+Steps 1 to 5, plus moderation, hearts and digests, are built, in `web/`, on the `claude/forum-app-cirr7p` branch.

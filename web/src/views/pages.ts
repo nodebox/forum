@@ -4,6 +4,7 @@ import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
 import { avatar, type Html } from "./layout.ts";
 import { postModMenu, topicModBar } from "./admin.ts";
+import type { YourThread } from "../notifications.ts";
 
 const time = (iso: string) => html`<time datetime="${iso}" title="${new Date(iso).toUTCString()}">${timeAgo(iso)}</time>`;
 
@@ -99,15 +100,28 @@ export interface RenderedPost {
   reactions: ReactionSummary[];
 }
 
+const HEART = "❤️";
+const heartIcon = raw(
+  '<svg class="heart-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 20.5s-7.5-4.6-9.3-9.4C1.4 7.6 3.6 4 7.1 4c2.1 0 3.6 1.2 4.9 3 1.3-1.8 2.8-3 4.9-3 3.5 0 5.7 3.6 4.4 7.1-1.8 4.8-9.3 9.4-9.3 9.4z"/></svg>',
+);
+
 function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | null): Html {
   const byEmoji = new Map(reactions.map((r) => [r.emoji, r]));
+  const needsSignin = user ? "" : raw("data-needs-signin");
+  const heart = byEmoji.get(HEART);
+  // The heart is the one-click "this helped" (as on Discourse); the other emoji sit behind "+ React".
   return html`<form class="reactions" method="post" action="/posts/${post.id}/react" data-reactions>
-    ${REACTIONS.map((emoji) => {
+    <button type="submit" name="emoji" value="${HEART}"
+      class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
+      aria-pressed="${heart?.mine ? "true" : "false"}" aria-label="Like" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
+      ${heartIcon}<span class="reaction-count">${heart ? heart.count : ""}</span>
+    </button>
+    ${REACTIONS.filter((e) => e !== HEART).map((emoji) => {
       const r = byEmoji.get(emoji);
       const label = r ? `${r.names} reacted ${emoji}` : `React ${emoji}`;
       return html`<button type="submit" name="emoji" value="${emoji}"
         class="reaction${r ? " has" : ""}${r?.mine ? " mine" : ""}"
-        aria-pressed="${r?.mine ? "true" : "false"}" title="${label}" ${user ? "" : raw('data-needs-signin')}>
+        aria-pressed="${r?.mine ? "true" : "false"}" title="${label}" ${needsSignin}>
         <span class="emoji">${emoji}</span><span class="reaction-count">${r ? r.count : ""}</span>
       </button>`;
     })}
@@ -128,7 +142,7 @@ export function topicPage(
   topic: TopicRow,
   posts: RenderedPost[],
   user: User | null,
-  opts: { page: number; hasMore: boolean; firstIndex: number },
+  opts: { page: number; hasMore: boolean; firstIndex: number; watching: boolean },
 ): Html {
   const canSolve = user && (user.id === topic.user_id || user.is_admin);
   const isAdmin = Boolean(user?.is_admin);
@@ -138,6 +152,7 @@ export function topicPage(
     <div class="topic-head">
       <h1>${topic.title}</h1>
       <p class="topic-sub"><span class="muted">Started by ${topic.author_name} · ${topic.post_count - 1} ${topic.post_count - 1 === 1 ? "reply" : "replies"}</span>${topicBadges(topic)}${topic.tender_id ? html`<span class="badge badge-legacy" title="This topic was moved here from the old forum">From the old forum</span>` : ""}</p>
+      ${user ? watchForm(topic, opts.watching) : ""}
     </div>
     ${isAdmin ? topicModBar(topic) : ""}
     <ol class="posts" start="${opts.firstIndex + 1}">
@@ -179,6 +194,48 @@ export function topicPage(
               ${composer({ action: `/t/${topic.id}/reply`, submitLabel: "Post reply" })}
             </section>`
           : html`<p class="signin-prompt"><a class="button button-accent" href="/signin?next=${encodeURIComponent(topicUrl(topic))}">Sign in to reply</a></p>`}`;
+}
+
+function watchForm(topic: TopicRow, watching: boolean): Html {
+  return html`<form method="post" action="/t/${topic.id}/watch" class="watch-form">
+    <input type="hidden" name="watch" value="${watching ? "0" : "1"}">
+    <button type="submit" class="watch${watching ? " on" : ""}" aria-pressed="${watching ? "true" : "false"}">
+      <span class="watch-mark" aria-hidden="true"></span>${watching ? "Watching" : "Watch"}
+    </button>
+    <span class="hint">${watching ? "You get an email digest when people reply." : "Get an email digest when people reply."}</span>
+  </form>`;
+}
+
+export function yourTopicsPage(topics: YourThread[], digest: boolean): Html {
+  return html`
+    <header class="page-head">
+      <p class="eyebrow">Following</p>
+      <h1>Your topics</h1>
+      <p class="lede">Topics you started, replied to or watch. ${digest
+        ? html`New replies in watched topics reach you as one email a day at most.`
+        : html`Email digests are off; turn them on in <a href="/settings">Settings</a>.`}</p>
+    </header>
+    ${topics.length === 0
+      ? html`<p class="empty">Nothing here yet. Start a topic or reply to one and it shows up here.</p>`
+      : html`<ol class="topic-list">
+          ${topics.map(
+            (t) => html`<li class="topic-item${t.new_posts > 0 ? " unread" : ""}">
+              <div class="topic-main">
+                <a class="topic-title" href="${t.new_posts > 0 ? `/t/${t.id}/unread` : topicUrl(t)}">${t.title}</a>
+                <div class="topic-meta">
+                  ${t.new_posts > 0 ? html`<span class="badge badge-new">${t.new_posts} new</span>` : ""}
+                  <a class="chip" href="/c/${t.category_slug}">${t.category_name}</a>
+                  <span>${t.started ? "You started this" : "You replied"}</span>
+                  ${t.watching ? html`<span class="watching-mark">Watching</span>` : ""}
+                </div>
+              </div>
+              <div class="topic-stats">
+                <span class="replies"><span class="count">${t.post_count - 1}</span><span class="replies-label">${t.post_count - 1 === 1 ? "reply" : "replies"}</span></span>
+                <span class="activity">${time(t.last_post_at)}</span>
+              </div>
+            </li>`,
+          )}
+        </ol>`}`;
 }
 
 export function composer(opts: { action: string; submitLabel: string; body?: string; titleField?: Html; error?: string }): Html {
@@ -271,7 +328,16 @@ export function confirmSignInPage(email: string, token: string): Html {
   </div>`;
 }
 
-export function profileForm(opts: { heading: string; intro: Html | string; name: string; next: string; submit: string; error?: string }): Html {
+export function profileForm(opts: {
+  heading: string;
+  intro: Html | string;
+  name: string;
+  next: string;
+  submit: string;
+  error?: string;
+  /** Show the email digest setting (Settings page only). */
+  digest?: boolean;
+}): Html {
   return html`<div class="auth-card">
     <h1>${opts.heading}</h1>
     <p class="lede">${opts.intro}</p>
@@ -283,6 +349,13 @@ export function profileForm(opts: { heading: string; intro: Html | string; name:
         <input id="name" name="name" required maxlength="60" value="${opts.name}" autocomplete="nickname">
         <p class="hint">Shown next to your posts. Your email stays private.</p>
       </div>
+      ${opts.digest === undefined
+        ? ""
+        : html`<input type="hidden" name="has_digest" value="1">
+            <label class="check">
+              <input type="checkbox" name="email_digest" value="1" ${opts.digest ? "checked" : ""}>
+              <span><strong>Email me about new replies</strong><br><span class="hint">In topics you started or watch. One email a day at most, listing every topic with news.</span></span>
+            </label>`}
       <button class="button button-accent" type="submit">${opts.submit}</button>
     </form>
   </div>`;

@@ -5,6 +5,7 @@ export interface Mail {
   subject: string;
   text: string;
   html: string;
+  headers?: Record<string, string>;
 }
 
 /**
@@ -14,7 +15,7 @@ export interface Mail {
  */
 export async function sendMail(env: Bindings, mail: Mail): Promise<void> {
   if (env.MAILER === "cloudflare") {
-    await env.EMAIL.send({ from: env.MAIL_FROM, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
+    await env.EMAIL.send({ from: env.MAIL_FROM, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html, headers: mail.headers });
     return;
   }
   console.log(`\n--- mail to ${mail.to}: ${mail.subject}\n${mail.text}\n---\n`);

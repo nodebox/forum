@@ -94,11 +94,18 @@ libraries). Since 2008 people have asked questions there about installing and us
 Python, graphics, fonts, exporting, data visualisation and their own projects. Posts are in
 English, Dutch and other languages.
 
+The old site was a helpdesk with an email inbox, so mail from other services landed in it as
+discussions. The new site is a public forum, where only something a person wrote for the
+community belongs.
+
 Decide whether each discussion is spam. Spam includes: advertising and SEO link drops; phishing
 (fake parcel or delivery notices, payment or account warnings, prize or refund messages);
 scams; casino, crypto, pharmacy, loans, essay writing, escort and similar promotions; gibberish
 or copied text whose purpose is to plant a link; and replies that add nothing but a link or a
-signature with links.
+signature with links. Automated and transactional email is spam too, with high confidence, even
+when it is harmless and mentions NodeBox: notifications from services such as Vimeo (video
+online, new comment, new follower, welcome, order), newsletters, receipts, account and
+verification mail, bounces and delivery failures, and out-of-office replies.
 
 Not spam: genuine questions, even if off-topic, badly written, rude, in another language, or
 never answered; bug reports and feature requests; people sharing their own NodeBox work or

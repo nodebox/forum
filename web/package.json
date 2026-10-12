@@ -1,0 +1,32 @@
+{
+  "name": "nodebox-forum-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The NodeBox forum: a Cloudflare Worker (Hono + D1 + R2 + Cloudflare Images).",
+  "type": "module",
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "dev": "npm run build:client && wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply nodebox-forum --local",
+    "db:seed:local": "wrangler d1 execute nodebox-forum --local --file seed/dev.sql",
+    "deploy": "npm run build:client && wrangler deploy",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p client",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "import:tender": "node --disable-warning=ExperimentalWarning scripts/import-tender.ts",
+    "admin": "node --disable-warning=ExperimentalWarning scripts/admin.ts"
+  },
+  "dependencies": {
+    "hono": "4.13.13",
+    "markdown-it": "15.0.2"
+  },
+  "devDependencies": {
+    "@fontsource/atkinson-hyperlegible-mono": "^5.3.0",
+    "@fontsource/atkinson-hyperlegible-next": "5.3.0",
+    "@types/markdown-it": "14.2.0",
+    "@types/node": "^22.19.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "wrangler": "4.149.0"
+  }
+}

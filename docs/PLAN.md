@@ -41,10 +41,10 @@ them and would otherwise use up the single-use token.
   `https://<forum domain>/auth/google/callback` plus
   `http://localhost:8787/auth/google/callback` for development. Secrets go in
   `wrangler secret put GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
-- An email sender for magic links. The code talks to a small `Mailer`
-  interface; the default implementation calls Resend's HTTP API
-  (`RESEND_API_KEY`). Cloudflare's own Email Service or Postmark are drop-in
-  alternatives. The sending domain needs SPF/DKIM records.
+- **Decided:** sign-in links go out through Cloudflare Email Sending (a
+  `send_email` binding). The sending domain has to be onboarded in the
+  Cloudflare dashboard. Email is used for sign-in links only: no notification
+  emails and no reply-by-email. People read and reply on the forum.
 - Bot protection on the sign-in form: Cloudflare Turnstile (a site key and a
   secret). Without it, the magic-link form is an open relay for sending email
   to arbitrary addresses. The form already rate-limits per address.
@@ -142,9 +142,32 @@ an "Imported from the old forum" label on imported topics.
 
 Search: SQLite FTS5 inside D1 over topic titles and post bodies.
 
-Moderation, minimal: admins can edit or delete any post, pin, lock and mark
-solved any topic, and ban a user. Topic authors can mark their own topic
-solved.
+Topic authors can mark their own topic solved.
+
+## 4b. Moderation
+
+**Decided, lightweight:**
+
+- The first admin is made from the command line
+  (`npm run admin -- grant <email> --remote`), which works even before that
+  person has signed in. From then on, admins promote or demote others at
+  `/admin/users`.
+- On every post, admins get a small "Moderate" menu: **Mark as spam** (with an
+  option to ban the author and hide all their posts at once) or **Remove** for
+  breaking the acceptable use policy, with a reason from a short list.
+  Removing or marking the opening post hides the whole topic.
+- Admins can pin and lock topics, and ban or unban people.
+- Nothing is deleted. A post has a status (`visible`, `spam`, `removed`);
+  hidden posts are listed at `/admin` and can be restored. Every action goes in
+  a moderation log.
+- Spam that the import's spam filter flags arrives with status `spam`, in the
+  same queue, so a false positive is one click to restore. The filter writes
+  its verdicts to a `spam_verdicts` table in `data/forum.sqlite`
+  (`discussion_id`, `comment_number` or NULL for the whole discussion,
+  `is_spam`, `reason`).
+
+**Needs Frederik:** the acceptable use policy text itself (the removal reasons
+in `web/src/moderation.ts` are a first guess at its headings).
 
 ## 5. Launch and cutover
 
@@ -168,10 +191,10 @@ data came over from Tender.
 ## 6. Open questions
 
 1. Forum domain: `forum.nodebox.net`? And what was the old public domain?
-2. Email provider for magic links (Resend, Postmark, Cloudflare Email Service).
+2. The sending address for sign-in links (`forum@nodebox.net`?).
 3. Knowledge-base articles: import as a "Guides" category, or move them to the
    NodeBox docs site?
-4. Who are the admins on day one (emails)?
+4. The acceptable use policy text, and who the admins are on day one.
 5. Should imported users who never posted be imported at all? Data
    minimisation says no; the code imports only users who wrote something.
 
@@ -185,4 +208,4 @@ data came over from Tender.
 6. Search, profile page, moderation tools.
 7. Attachment uploader script, legacy redirects, staging deploy.
 
-Steps 1 to 5 are being built first, in `web/`, on the `claude/forum-app-cirr7p` branch.
+Steps 1 to 5, plus moderation, are built, in `web/`, on the `claude/forum-app-cirr7p` branch.

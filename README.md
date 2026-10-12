@@ -43,6 +43,8 @@ To catch up later (new posts while we build the new forum), run
 `npm run export -- --refresh`: it re-walks the lists and re-fetches only
 discussions whose `updated_at` changed.
 
+To have Claude Code run and debug the first export: `claude "$(cat HANDOFF.md)"`.
+
 ## Schema
 
 `migrations/0001_tender_import.sql` is plain SQLite and D1-compatible, so the

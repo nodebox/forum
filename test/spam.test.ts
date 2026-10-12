@@ -90,6 +90,8 @@ test("classify, review, apply", async () => {
 
     const excluded = () => db.prepare("SELECT discussion_id, comment_number FROM spam_excluded ORDER BY 1, 2").all().map((r: any) => [r.discussion_id, r.comment_number]);
     assert.deepEqual(excluded(), [[2, 0], [3, 2], [5, 0]]);
+    const reason = db.prepare("SELECT reason FROM spam_excluded WHERE discussion_id = 3").get() as any;
+    assert.equal(reason.reason, "casino link");
 
     // Nothing left to do on a second run.
     await spam.classify(db, cfg, client);

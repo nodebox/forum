@@ -25,14 +25,18 @@ CREATE TABLE IF NOT EXISTS spam_decisions (
   PRIMARY KEY (discussion_id, comment_number)
 );
 
--- What the import leaves out. comment_number = 0 drops the whole discussion.
--- Model verdicts count only at confidence >= 0.9; everything below that is
--- excluded only after a reviewer marks it spam.
+-- What the import leaves out (or hides). comment_number = 0 is the whole
+-- discussion, N > 0 is only reply N. Model verdicts count only at confidence
+-- >= 0.9; anything below that is excluded only after a reviewer marks it spam.
 DROP VIEW IF EXISTS spam_excluded;
 CREATE VIEW spam_excluded AS
-SELECT discussion_id, comment_number FROM spam_decisions WHERE decision = 'spam'
-UNION
-SELECT v.discussion_id, v.comment_number
+SELECT m.discussion_id, m.comment_number,
+       COALESCE(v.reason, 'marked spam in review') AS reason
+FROM spam_decisions m
+LEFT JOIN spam_verdicts v ON v.discussion_id = m.discussion_id AND v.comment_number = m.comment_number
+WHERE m.decision = 'spam'
+UNION ALL
+SELECT v.discussion_id, v.comment_number, v.reason
 FROM spam_verdicts v
 LEFT JOIN spam_decisions m ON m.discussion_id = v.discussion_id AND m.comment_number = v.comment_number
 WHERE m.decision IS NULL

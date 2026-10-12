@@ -80,7 +80,7 @@ verdicts, and genuine verdicts below 0.7. Put `spam` or `ham` in the `decision`
 column where you want to confirm or overrule, and run `apply`; your decisions win
 over the model's. An empty decision keeps the model's verdict.
 
-For the import, `spam_excluded` has `(discussion_id, comment_number)` rows;
+For the import, `spam_excluded` has `(discussion_id, comment_number, reason)` rows;
 `comment_number = 0` drops the whole discussion, any other number drops that reply:
 
 ```sql

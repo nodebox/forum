@@ -1,0 +1,19 @@
+{
+  "name": "nodebox-forum",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NodeBox forum: export from Tender, and later the Cloudflare (Hono + D1 + R2) forum itself.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "export": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "typescript": "^5.9.0"
+  }
+}

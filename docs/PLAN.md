@@ -10,7 +10,12 @@ set up are marked **Needs Frederik**.
 
 ## 1. Accounts and sign-in
 
-**Decided: no passwords at all.** Two ways in, both tied to an email address:
+**Decided: no passwords at all.** Launch with emailed sign-in links only
+(Frederik, 2026-10-12). Google stays in the code, hidden until
+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` are set, so it can be switched on
+later without touching accounts. Cloudflare Zero Trust (Access) was ruled out:
+it's a login wall for internal tools, priced per seat. The two ways in, both
+tied to an email address:
 
 1. **Continue with Google** (OpenID Connect). We trust Google's email only when
    `email_verified` is true, and then link the Google identity to the user with

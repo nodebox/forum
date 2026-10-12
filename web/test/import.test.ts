@@ -41,8 +41,22 @@ function fixture(): DatabaseSync {
       ('/assets/abc/shot.png', 100, 1, 'shot.png', 'image/png', 1234, '{}'),
       ('/assets/def/project.zip', 100, 5, 'project.zip', 'application/zip', 99999, '{}'),
       ('/assets/ghi/note.txt', 100, 3, 'note.txt', 'text/plain', 1, '{}');
-    CREATE TABLE spam_verdicts (discussion_id INTEGER NOT NULL, comment_number INTEGER, is_spam INTEGER, reason TEXT, model TEXT, classified_at TEXT);
-    INSERT INTO spam_verdicts VALUES (101, NULL, 1, 'phishing', 'x', '${t}'), (100, 4, 1, 'pharma', 'x', '${t}'), (100, 5, 0, NULL, 'x', '${t}');
+    -- Same shape as the spam filter's migrations/0002_spam.sql.
+    CREATE TABLE spam_verdicts (discussion_id INTEGER NOT NULL, comment_number INTEGER NOT NULL, verdict TEXT NOT NULL, confidence REAL,
+      source TEXT NOT NULL, reason TEXT, model TEXT, classified_at TEXT NOT NULL, PRIMARY KEY (discussion_id, comment_number));
+    CREATE TABLE spam_decisions (discussion_id INTEGER NOT NULL, comment_number INTEGER NOT NULL, decision TEXT NOT NULL, decided_at TEXT NOT NULL,
+      PRIMARY KEY (discussion_id, comment_number));
+    CREATE VIEW spam_excluded AS
+      SELECT discussion_id, comment_number FROM spam_decisions WHERE decision = 'spam'
+      UNION
+      SELECT v.discussion_id, v.comment_number FROM spam_verdicts v
+      LEFT JOIN spam_decisions m ON m.discussion_id = v.discussion_id AND m.comment_number = v.comment_number
+      WHERE m.decision IS NULL AND v.verdict = 'spam' AND (v.source <> 'model' OR v.confidence >= 0.9);
+    INSERT INTO spam_verdicts VALUES
+      (101, 0, 'spam', 0.99, 'model', 'phishing', 'm', '${t}'),
+      (100, 0, 'ham', 0.95, 'model', NULL, 'm', '${t}'),
+      (100, 5, 'spam', 0.6, 'model', 'unsure pharma', 'm', '${t}');
+    INSERT INTO spam_decisions VALUES (100, 4, 'spam', '${t}');
   `);
   return db;
 }
@@ -81,13 +95,18 @@ test("converts a Tender export into forum rows", () => {
   ]);
 
   assert.equal((db.prepare("SELECT topic_id FROM legacy_redirects WHERE path = '/discussions/problems/100-crash-on-import'").get() as any).topic_id, 100);
+  const reasons = db.prepare("SELECT topic_id, tender_number, moderation_reason FROM posts WHERE status = 'spam' ORDER BY id").all().map((r) => ({ ...r }));
+  assert.deepEqual(reasons, [
+    { topic_id: 100, tender_number: 4, moderation_reason: "Spam filter: marked spam in review" },
+    { topic_id: 101, tender_number: 1, moderation_reason: "Spam filter (model): phishing" },
+  ]);
   assert.equal(stats.spamTopics, 1);
   assert.equal(stats.spamPosts, 2);
 });
 
 test("works without spam verdicts", () => {
   const db = fixture();
-  db.exec("DROP TABLE spam_verdicts");
+  db.exec("DROP VIEW spam_excluded; DROP TABLE spam_verdicts; DROP TABLE spam_decisions;");
   const { stats } = convert(db);
   assert.equal(stats.spamPosts, 0);
   assert.equal(stats.topics, 2);

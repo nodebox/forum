@@ -162,9 +162,10 @@ Topic authors can mark their own topic solved.
   a moderation log.
 - Spam that the import's spam filter flags arrives with status `spam`, in the
   same queue, so a false positive is one click to restore. The filter writes
-  its verdicts to a `spam_verdicts` table in `data/forum.sqlite`
-  (`discussion_id`, `comment_number` or NULL for the whole discussion,
-  `is_spam`, `reason`).
+  its results into `data/forum.sqlite` (`migrations/0002_spam.sql` on the
+  spam-filter branch); the import reads the `spam_excluded` view, which already
+  applies the review decisions and the confidence threshold, and takes the
+  reason from `spam_verdicts`.
 
 **Needs Frederik:** the acceptable use policy text itself (the removal reasons
 in `web/src/moderation.ts` are a first guess at its headings).

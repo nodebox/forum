@@ -48,9 +48,9 @@ npm run import:tender                         # ../data/forum.sqlite → ../data
 npx wrangler d1 execute nodebox-forum --local --file ../data/import.sql
 ```
 
-Run it against an empty, freshly migrated database. If the spam filter has
-written a `spam_verdicts` table into `forum.sqlite`, flagged discussions and
-comments come in with status `spam` (hidden, restorable from `/admin`).
+Run it against an empty, freshly migrated database. If the spam filter
+(`npm run spam` in the repo root) has run, everything in its `spam_excluded`
+view comes in with status `spam` (hidden, restorable from `/admin`).
 
 ## Tests
 

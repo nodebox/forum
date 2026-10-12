@@ -12,7 +12,7 @@
 // (resolved becomes "solved"); comments that aren't internal notes or system
 // messages; the users who wrote them (deduplicated on email); attachment
 // metadata (files are uploaded separately); old URLs for redirects.
-// Items the spam filter flagged (table `spam_verdicts`, if present) are
+// Items the spam filter flagged (the `spam_excluded` view, if present) are
 // imported with status 'spam': hidden, but admins can restore them.
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
@@ -83,7 +83,7 @@ const iso = (s: string | null | undefined) => (s ? new Date(s).toISOString() : n
 const isPublic = (v: unknown) => v === null || v === undefined || Number(v) !== 0;
 
 function tableExists(db: DatabaseSync, name: string): boolean {
-  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(name));
 }
 
 /** Rough HTML to text, for comments that only have Tender's rendered HTML. */
@@ -104,14 +104,30 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   const out: string[] = [];
   const stats: ImportStats = { categories: 0, users: 0, topics: 0, posts: 0, spamTopics: 0, spamPosts: 0, attachments: 0, redirects: 0, skippedDiscussions: 0 };
 
-  // Spam verdicts from the spam filter, if it has run.
+  // Spam flags from the spam filter (migrations/0002_spam.sql), if it has run.
+  // `spam_excluded` already folds in review decisions and the confidence
+  // threshold; comment_number 0 means the whole discussion.
   const spamDiscussions = new Map<number, string>();
   const spamComments = new Map<string, string>();
-  if (tableExists(src, "spam_verdicts")) {
-    for (const v of src.prepare("SELECT discussion_id, comment_number, reason FROM spam_verdicts WHERE is_spam = 1").all() as any[]) {
-      const reason = v.reason ? `Spam filter: ${v.reason}` : "Spam filter";
-      if (v.comment_number === null) spamDiscussions.set(v.discussion_id, reason);
-      else spamComments.set(`${v.discussion_id}:${v.comment_number}`, reason);
+  if (tableExists(src, "spam_excluded")) {
+    const hasVerdicts = tableExists(src, "spam_verdicts");
+    const hasDecisions = tableExists(src, "spam_decisions");
+    const rows = src
+      .prepare(
+        `SELECT e.discussion_id, e.comment_number,
+                ${hasDecisions ? "d.decision" : "NULL"} AS decision,
+                ${hasVerdicts ? "v.source" : "NULL"} AS source,
+                ${hasVerdicts ? "v.reason" : "NULL"} AS reason
+         FROM spam_excluded e
+         ${hasDecisions ? "LEFT JOIN spam_decisions d ON d.discussion_id = e.discussion_id AND d.comment_number = e.comment_number" : ""}
+         ${hasVerdicts ? "LEFT JOIN spam_verdicts v ON v.discussion_id = e.discussion_id AND v.comment_number = e.comment_number" : ""}`,
+      )
+      .all() as any[];
+    for (const r of rows) {
+      const reason =
+        r.decision === "spam" ? "Spam filter: marked spam in review" : `Spam filter${r.source ? ` (${r.source})` : ""}${r.reason ? `: ${r.reason}` : ""}`;
+      if (r.comment_number === 0) spamDiscussions.set(r.discussion_id, reason.slice(0, 300));
+      else spamComments.set(`${r.discussion_id}:${r.comment_number}`, reason.slice(0, 300));
     }
   }
 

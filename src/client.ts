@@ -49,6 +49,12 @@ export class TenderClient {
     return this.config.apiBase + (pathOrHref.startsWith("/") ? "" : "/") + pathOrHref;
   }
 
+  /** True when the URL is on the API or asset host, the only hosts that get the API key. */
+  private isTender(url: string): boolean {
+    const origin = new URL(url).origin;
+    return origin === new URL(this.config.apiBase).origin || origin === new URL(this.config.assetBase).origin;
+  }
+
   private async throttle() {
     const wait = this.lastRequest + this.config.delayMs - Date.now();
     if (wait > 0) await sleep(wait);
@@ -57,7 +63,8 @@ export class TenderClient {
 
   async raw(url: string, init: { accept?: string; auth?: boolean } = {}): Promise<Response> {
     const headers: Record<string, string> = { Accept: init.accept ?? "application/vnd.tender-v1+json" };
-    if (init.auth !== false) {
+    // Attachment URLs are presigned for S3, which rejects a request that carries a second credential.
+    if (init.auth !== false && this.isTender(url)) {
       // Current docs use a bearer token; older keys used X-Tender-Auth. Sending both is harmless.
       headers.Authorization = `Bearer ${this.config.apiKey}`;
       headers["X-Tender-Auth"] = this.config.apiKey;

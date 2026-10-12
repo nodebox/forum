@@ -164,3 +164,28 @@ test("full export against a fake Tender API, then resume", async () => {
   assert.equal(seen.length, before, "nothing re-fetched on resume");
   db.close();
 });
+
+test("the API key is not sent to hosts other than Tender", async () => {
+  // Tender hands out attachment URLs that are presigned for S3; S3 answers 400 when a request carries a second credential.
+  const s3 = http.createServer((req, res) => {
+    const extra = req.headers.authorization || req.headers["x-tender-auth"];
+    res.writeHead(extra ? 400 : 200);
+    res.end(extra ? "Only one auth mechanism allowed" : "PNG!!");
+  });
+  await new Promise<void>((r) => s3.listen(0, "127.0.0.1", r));
+  const s3Base = `http://127.0.0.1:${(s3.address() as any).port}`;
+  const client = new TenderClient({
+    apiKey: KEY,
+    apiBase: "https://api.tenderapp.com/nodebox",
+    assetBase: "https://nodebox.tenderapp.com",
+    delayMs: 0,
+    maxRetries: 0,
+  } as Config);
+  try {
+    const res = await client.raw(`${s3Base}/assets/abc123/file.png?AWSAccessKeyId=x&Signature=y`, { accept: "*/*" });
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), "PNG!!");
+  } finally {
+    s3.close();
+  }
+});

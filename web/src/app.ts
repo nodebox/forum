@@ -46,6 +46,7 @@ import {
   categoryPage,
   checkEmailPage,
   confirmSignInPage,
+  aupPage,
   guidelinesPage,
   homePage,
   messagePage,
@@ -186,6 +187,7 @@ app.get("/t/:id/:slug", showTopic);
 app.get("/t/:id", showTopic);
 
 app.get("/guidelines", (c) => page(c, guidelinesPage(), { title: "Guidelines" }));
+app.get("/aup", (c) => page(c, aupPage(), { title: "Acceptable use" }));
 
 // --- Writing ------------------------------------------------------------------
 

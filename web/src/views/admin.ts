@@ -29,7 +29,7 @@ export function postModMenu(post: PostRow, returnTo: string): Html {
       </form>
       <form method="post" action="/admin/posts/${post.id}" class="stack-sm">
         <input type="hidden" name="return" value="${returnTo}">
-        <label for="reason-${post.id}" class="small">Remove for breaking the acceptable use policy:</label>
+        <label for="reason-${post.id}" class="small">Remove for breaking the <a href="/aup" target="_blank">acceptable use policy</a>:</label>
         <select id="reason-${post.id}" name="reason">${REMOVAL_REASONS.map((r) => html`<option>${r}</option>`)}</select>
         <button class="button button-small button-danger" name="action" value="remove">Remove post</button>
       </form>

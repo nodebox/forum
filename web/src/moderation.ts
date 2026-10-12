@@ -1,14 +1,14 @@
 import type { PostStatus, User } from "./db.ts";
 import { now } from "./util.ts";
 
-/** Reasons offered when removing a post, matching the acceptable use policy. */
+/** Reasons offered when removing a post: one per rule of the acceptable use policy (/aup). */
 export const REMOVAL_REASONS = [
   "Spam or advertising",
-  "Abusive, harassing or hateful",
-  "Illegal or infringing content",
-  "Malware or harmful download",
-  "Personal information about someone else",
-  "Off-topic or duplicate",
+  "Disrespectful, harassing or hateful",
+  "Content you may not share (copyright, piracy)",
+  "Malware or a harmful download",
+  "Someone else's personal information",
+  "Off-topic",
 ] as const;
 
 export function log(

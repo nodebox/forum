@@ -19,7 +19,7 @@ export interface LayoutProps {
 
 const logo = raw(`<svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true">
   <path d="M9 10 C 16 10, 16 22, 23 22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-  <rect x="3" y="5" width="10" height="10" rx="3" fill="var(--blue)"/>
+  <rect x="3" y="5" width="10" height="10" rx="3" fill="#86b6ec"/>
   <rect x="19" y="17" width="10" height="10" rx="3" fill="var(--orange)"/>
 </svg>`);
 
@@ -78,7 +78,7 @@ export function layout(props: LayoutProps, content: Html): Html {
   </main>
   <footer class="site-footer">
     <div class="wrap">
-      <p><a href="https://www.nodebox.net/">nodebox.net</a> · <a href="https://www.nodebox.net/node/">Documentation</a> · <a href="/guidelines">Guidelines</a></p>
+      <p><a href="https://www.nodebox.net/">nodebox.net</a> · <a href="https://www.nodebox.net/node/">Documentation</a> · <a href="/guidelines">Guidelines</a> · <a href="/aup">Acceptable use</a></p>
     </div>
   </footer>
 </body>

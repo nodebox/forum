@@ -127,13 +127,11 @@ self-hosted (no Google Fonts requests, which also avoids the GDPR question of
 sending visitors' IPs to Google). 17 px base, 1.6 line height, 68-character
 measure for post text.
 
-Colour: the NodeBox blue, blue-tinted neutrals (near-black to near-white),
-orange as the single accent for calls to action, unread markers and the
-"new forum" banner. Light and dark mode follow the system setting. The exact
-blue in `web/public/styles.css` is a stand-in.
-
-**Needs Frederik:** the hex values of the nodebox.net blue (and the orange, if
-there is one already).
+Colour (**Decided**): NodeBox navy `#041a32` for the header, text and primary
+buttons, a lighter navy-hued blue (`#1f5c99`) for links, navy-tinted neutrals,
+and a complementary orange (`#f7932f`, with navy text on it at 7.6:1) as the
+single accent for calls to action and the "new forum" banner. Light and dark
+mode follow the system setting; in dark mode the navy becomes the page.
 
 "This is a new forum" is said three times: a dismissible orange banner on every
 page for the first weeks, a short note on the sign-in page ("Had an account on
@@ -167,8 +165,10 @@ Topic authors can mark their own topic solved.
   applies the review decisions and the confidence threshold, and carries the
   reason.
 
-**Needs Frederik:** the acceptable use policy text itself (the removal reasons
-in `web/src/moderation.ts` are a first guess at its headings).
+The acceptable use policy is a short page at `/aup` with six rules; each
+removal reason in the Moderate menu is one of them. It was written for this
+forum, not copied, and hasn't had a legal review. Its contact address
+(`info@nodebox.net`) needs checking.
 
 ## 5. Launch and cutover
 
@@ -195,7 +195,7 @@ data came over from Tender.
 2. The sending address for sign-in links (`forum@nodebox.net`?).
 3. Knowledge-base articles: import as a "Guides" category, or move them to the
    NodeBox docs site?
-4. The acceptable use policy text, and who the admins are on day one.
+4. Who the admins are on day one.
 5. Should imported users who never posted be imported at all? Data
    minimisation says no; the code imports only users who wrote something.
 

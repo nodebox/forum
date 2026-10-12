@@ -294,6 +294,27 @@ export function messagePage(heading: string, message: string | Html, action?: { 
   </div>`;
 }
 
+export function aupPage(): Html {
+  return html`<article class="prose narrow-prose">
+    <h1>Acceptable use</h1>
+    <p>The NodeBox forum is a shared space for people who use NodeBox. By posting here you agree to these few rules. They are short on purpose.</p>
+    <h2>1. Be respectful</h2>
+    <p>No harassment, personal attacks, threats, or hateful content about anyone's identity. Disagree with ideas, not people.</p>
+    <h2>2. No spam or advertising</h2>
+    <p>No unsolicited promotion, link farming, phishing, or posts that exist only to sell something. Sharing your own NodeBox work is welcome.</p>
+    <h2>3. Only share what you may share</h2>
+    <p>Post and attach only things you made or have the right to share. No pirated software, cracked licences, or other people's work passed off as yours.</p>
+    <h2>4. No malware</h2>
+    <p>Attachments must be safe to open: NodeBox projects, data, images and archives of those. Never upload anything meant to harm someone's computer.</p>
+    <h2>5. Respect privacy</h2>
+    <p>Don't post other people's personal information, such as addresses, phone numbers or private messages, without their consent.</p>
+    <h2>6. Stay on topic</h2>
+    <p>Keep posts about NodeBox, generative design and data visualisation, and related tools.</p>
+    <h2>What happens when a rule is broken</h2>
+    <p>Moderators can hide posts that break these rules and suspend accounts that keep doing so or that exist only to spam. Hidden posts are kept, not deleted, so a mistake can be undone. If you think we got it wrong, or you see something that breaks these rules, email <a href="mailto:info@nodebox.net">info@nodebox.net</a>.</p>
+  </article>`;
+}
+
 export function guidelinesPage(): Html {
   return html`<article class="prose narrow-prose">
     <h1>Guidelines</h1>
@@ -305,5 +326,6 @@ export function guidelinesPage(): Html {
       <li><strong>Mark it solved</strong> when you have your answer, so the next person finds it.</li>
       <li><strong>Be kind.</strong> Everyone was new once.</li>
     </ul>
+    <p>The rules everyone agrees to are in the <a href="/aup">acceptable use policy</a>.</p>
   </article>`;
 }

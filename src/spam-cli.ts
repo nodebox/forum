@@ -16,9 +16,8 @@ Options for classify and estimate:
   --redo          classify everything again, not only new discussions
   --limit=N       only the first N pending discussions (for a trial)
 
-Environment: ANTHROPIC_API_KEY (or an \`ant auth login\` profile),
-SPAM_MODEL (default claude-opus-5-5), SPAM_EFFORT (default low),
-SPAM_CONCURRENCY (default 4), DATA_DIR (default data).`;
+Environment: ANTHROPIC_API_KEY, SPAM_MODEL (default claude-haiku-5-5),
+SPAM_EFFORT (default low), SPAM_CONCURRENCY (default 4), DATA_DIR (default data).`;
 
 function env(name: string): string | undefined {
   const v = process.env[name];
@@ -36,7 +35,7 @@ async function main() {
   const effort = env("SPAM_EFFORT") ?? "low";
   if (!["low", "medium", "high"].includes(effort)) throw new Error(`SPAM_EFFORT must be low, medium or high`);
   const cfg: spam.SpamConfig = {
-    model: env("SPAM_MODEL") ?? "claude-opus-5-5",
+    model: env("SPAM_MODEL") ?? "claude-haiku-5-5",
     effort: effort as spam.SpamConfig["effort"],
     concurrency: Number(env("SPAM_CONCURRENCY") ?? 4),
     limit: limit ? Number(limit) : undefined,

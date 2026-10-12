@@ -61,9 +61,9 @@ npm run spam -- apply data/spam-review.csv
 npm run spam -- stats
 ```
 
-It needs `ANTHROPIC_API_KEY` in `.env` (see `.env.tpl`) or an `ant auth login`
-profile. The model is `claude-opus-5-5` at low effort; set
-`SPAM_MODEL=claude-haiku-5-5` for a much cheaper run.
+It needs `ANTHROPIC_API_KEY` in `.env`; `npm run env` fills it in from 1Password
+(`op://NodeBox/NodeBox Tender Forum/ANTHROPIC_API_KEY`). The model is
+`claude-haiku-5-5` at low effort; `SPAM_MODEL` picks another one.
 
 How a discussion is decided:
 

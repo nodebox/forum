@@ -80,13 +80,14 @@ test("classify, review, apply", async () => {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as any).port;
   const client = new Anthropic({ apiKey: "test", baseURL: `http://127.0.0.1:${port}`, maxRetries: 0 });
-  const cfg: spam.SpamConfig = { model: "claude-opus-5-5", effort: "low", concurrency: 2, limit: undefined, redo: false };
+  const cfg: spam.SpamConfig = { model: "claude-haiku-5-5", effort: "low", concurrency: 2, limit: undefined, redo: false };
   try {
     await spam.classify(db, cfg, client);
     // Discussions 1 (heuristic) and 5 (Tender) never reach the model.
     assert.equal(requests.length, 3);
     assert.equal(requests[0].output_config.format.type, "json_schema");
-    assert.deepEqual(requests[0].fallbacks, "default");
+    assert.equal(requests[0].model, "claude-haiku-5-5");
+    assert.equal(requests[0].fallbacks, undefined);
 
     const excluded = () => db.prepare("SELECT discussion_id, comment_number FROM spam_excluded ORDER BY 1, 2").all().map((r: any) => [r.discussion_id, r.comment_number]);
     assert.deepEqual(excluded(), [[2, 0], [3, 2], [5, 0]]);

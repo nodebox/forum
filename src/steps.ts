@@ -161,10 +161,12 @@ function saveComment(ctx: Ctx, discussionId: number, c: any) {
   });
   for (const a of c.assets ?? []) {
     if (!a.download_path) continue;
-    upsert(ctx.db, "attachments", ["download_path"], {
-      download_path: a.download_path,
+    upsert(ctx.db, "attachments", ["discussion_id", "comment_number", "download_path"], {
       discussion_id: discussionId,
       comment_number: c.number,
+      // The URL carries a signature that changes on every fetch; the path identifies the file.
+      download_path: new URL(a.download_path, "https://x").pathname,
+      download_url: a.download_path,
       filename: a.filename,
       content_type: a.content_type,
       size: a.size,
@@ -320,15 +322,15 @@ export function attachmentLocalPath(downloadPath: string): string {
 export async function attachments(ctx: Ctx) {
   log("Attachments");
   const todo = ctx.db
-    .prepare("SELECT download_path FROM attachments WHERE downloaded_at IS NULL ORDER BY download_path")
-    .all() as { download_path: string }[];
+    .prepare("SELECT download_path, max(download_url) AS download_url FROM attachments WHERE downloaded_at IS NULL GROUP BY download_path ORDER BY download_path")
+    .all() as { download_path: string; download_url: string }[];
   log(` ${todo.length} files to download.`);
   let i = 0;
-  for (const { download_path } of todo) {
+  for (const { download_path, download_url } of todo) {
     i++;
     const rel = attachmentLocalPath(download_path);
     const dest = path.join(ctx.config.attachmentsDir, rel);
-    const url = /^https?:/.test(download_path) ? download_path : ctx.config.assetBase + download_path;
+    const url = /^https?:/.test(download_url) ? download_url : ctx.config.assetBase + download_url;
     try {
       const res = await ctx.client.raw(url, { accept: "*/*" });
       if (!res.ok || !res.body) throw new HttpError(res.status, url, await res.text());

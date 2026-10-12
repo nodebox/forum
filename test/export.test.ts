@@ -44,12 +44,14 @@ function fakeTender(base: () => string) {
       user_href: `${api()}/users/${i % 2 ? 8 : 7}`,
       internal: false,
       created_at: "2015-01-01T00:00:00Z",
-      assets: i === 0 && id === 101
-        ? [{ filename: "my file.png", content_type: "image/png", size: 5, download_path: "/assets/abc123/my%20file.png" }]
+      // Tender signs the URL afresh on every response, and one file can hang on comments of two discussions.
+      assets: i === 0 && (id === 101 || id === 102)
+        ? [{ filename: "my file.png", content_type: "image/png", size: 5, download_path: `${base()}/assets/abc123/my%20file.png?Signature=${++signatures}` }]
         : [],
     }));
   const discussions = [...Array.from({ length: 31 }, (_, i) => discussion(100 + i, "resolved")), discussion(200, "open")];
   let hits429 = 0;
+  let signatures = 0;
   const seen: string[] = [];
 
   const server = http.createServer((req, res) => {
@@ -127,6 +129,9 @@ test("full export against a fake Tender API, then resume", async () => {
   console.log = () => {};
   try {
     for (const s of ["categories", "discussions", "details", "users", "kb", "attachments"] as const) await steps[s](ctx);
+    // Fetching a discussion again brings a new signature for the same file.
+    db.exec("UPDATE discussions SET detail_fetched_at = NULL WHERE id = 101");
+    await steps.details(ctx);
   } finally {
     console.log = origLog;
     server.close();
@@ -143,7 +148,16 @@ test("full export against a fake Tender API, then resume", async () => {
     [{ id: 7, name: "Alice" }, { id: 8, name: "Bob" }],
   );
   assert.equal(one("SELECT count(*) n FROM kb_articles WHERE section_id = 5").n, 1);
-  const att = one("SELECT * FROM attachments");
+  const atts = db.prepare("SELECT * FROM attachments ORDER BY discussion_id").all() as any[];
+  assert.deepEqual(atts.map((a) => [a.discussion_id, a.comment_number, a.download_path]), [
+    [101, 1, "/assets/abc123/my%20file.png"],
+    [102, 1, "/assets/abc123/my%20file.png"],
+  ]);
+  const signature = (a: any) => Number(new URL(a.download_url).searchParams.get("Signature"));
+  assert.ok(signature(atts[0]) > signature(atts[1]), "the re-fetch replaced the signed URL");
+  assert.equal(seen.filter((u) => u.startsWith("/assets/")).length, 1, "a shared file is downloaded once");
+  assert.equal(atts[1].local_path, atts[0].local_path);
+  const att = atts[0];
   assert.equal(att.local_path, "assets/abc123/my file.png");
   assert.equal(fs.readFileSync(path.join(config.attachmentsDir, att.local_path), "utf8"), "PNG!!");
   assert.equal(att.sha256.length, 64);

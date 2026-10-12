@@ -78,9 +78,10 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id);
 
 CREATE TABLE IF NOT EXISTS attachments (
-  download_path   TEXT PRIMARY KEY,   -- /assets/{hash}/{filename}; doubles as the R2 key
   discussion_id   INTEGER NOT NULL,
   comment_number  INTEGER NOT NULL,
+  download_path   TEXT NOT NULL,      -- /assets/{hash}/{filename}; doubles as the R2 key. One file can hang on several comments.
+  download_url    TEXT NOT NULL,      -- where to fetch it; Tender signs this for S3 and it expires after about a day
   filename        TEXT,
   content_type    TEXT,
   size            INTEGER,
@@ -92,9 +93,10 @@ CREATE TABLE IF NOT EXISTS attachments (
   sha256          TEXT,
   downloaded_size INTEGER,
   download_error  TEXT,
-  downloaded_at   TEXT
+  downloaded_at   TEXT,
+  PRIMARY KEY (discussion_id, comment_number, download_path)
 );
-CREATE INDEX IF NOT EXISTS idx_attachments_comment ON attachments(discussion_id, comment_number);
+CREATE INDEX IF NOT EXISTS idx_attachments_path ON attachments(download_path);
 
 CREATE TABLE IF NOT EXISTS kb_sections (
   id          INTEGER PRIMARY KEY,

@@ -59,14 +59,7 @@ in Node against local D1/R2 (wrangler's platform proxy): sign-in by email link,
 claiming an imported account, posting with an attachment, reactions,
 moderation, CSRF and old-URL redirects.
 
-## Deploy (once the accounts exist)
+## Deploy
 
-1. `npx wrangler d1 create nodebox-forum`, paste the id into `wrangler.jsonc`.
-2. `npx wrangler r2 bucket create nodebox-forum`.
-3. Onboard the sending domain for Cloudflare Email Sending; set `MAILER` to
-   `cloudflare` and `MAIL_FROM`, `PUBLIC_URL` in `wrangler.jsonc`.
-4. In Cloudflare Images, create the variants `nodebox-forum-post` (1200 px wide,
-   scale down) and `nodebox-forum-thumb` (400 px).
-5. Secrets: `wrangler secret put` for `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-   `CF_ACCOUNT_ID`, `CF_IMAGES_TOKEN`, `CF_IMAGES_HASH`.
-6. `npx wrangler d1 migrations apply nodebox-forum --remote`, then `npm run deploy`.
+Pushing to `main` tests, migrates and deploys through GitHub Actions. Setup,
+the first deploy and rollback are in [DEPLOY.md](DEPLOY.md).

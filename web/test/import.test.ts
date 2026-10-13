@@ -37,10 +37,11 @@ function fixture(): DatabaseSync {
       (101, 1, 3, 'Bob', NULL, 'Uw pakket', 0, '2014-05-04T09:00:00Z', '{}'),
       (102, 1, 1, 'Ann', NULL, 'secret', 0, '${t}', '{}'),
       (103, 1, 1, 'Ann', NULL, 'private', 0, '${t}', '{}');
-    INSERT INTO attachments (download_path, discussion_id, comment_number, filename, content_type, size, raw) VALUES
-      ('/assets/abc/shot.png', 100, 1, 'shot.png', 'image/png', 1234, '{}'),
-      ('/assets/def/project.zip', 100, 5, 'project.zip', 'application/zip', 99999, '{}'),
-      ('/assets/ghi/note.txt', 100, 3, 'note.txt', 'text/plain', 1, '{}');
+    INSERT INTO attachments (download_path, download_url, discussion_id, comment_number, filename, content_type, size, raw) VALUES
+      ('/assets/abc/shot.png', 'https://s3.example/abc/shot.png?sig=1', 100, 1, 'shot.png', 'image/png', 1234, '{}'),
+      ('/assets/def/project.zip', 'https://s3.example/def/project.zip?sig=1', 100, 5, 'project.zip', 'application/zip', 99999, '{}'),
+      ('/assets/abc/shot.png', 'https://s3.example/abc/shot.png?sig=2', 100, 5, 'shot.png', 'image/png', 1234, '{}'),
+      ('/assets/ghi/note.txt', 'https://s3.example/ghi/note.txt?sig=1', 100, 3, 'note.txt', 'text/plain', 1, '{}');
     -- Same shape as the spam filter's migrations/0002_spam.sql.
     CREATE TABLE spam_verdicts (discussion_id INTEGER NOT NULL, comment_number INTEGER NOT NULL, verdict TEXT NOT NULL, confidence REAL,
       source TEXT NOT NULL, reason TEXT, model TEXT, classified_at TEXT NOT NULL, PRIMARY KEY (discussion_id, comment_number));

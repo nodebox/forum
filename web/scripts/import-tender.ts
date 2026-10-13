@@ -167,8 +167,10 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
      FROM comments WHERE discussion_id = ? AND coalesce(internal, 0) = 0 AND coalesce(system_message, 0) = 0
      ORDER BY number`,
   );
+  // One file can hang on several comments (the exporter keys on comment + path); the forum keeps it on the first.
+  const importedAttachments = new Set<string>();
   const attachmentsStmt = src.prepare(
-    "SELECT download_path, comment_number, filename, content_type, size, width, height, created_at, local_path FROM attachments WHERE discussion_id = ?",
+    "SELECT download_path, comment_number, filename, content_type, size, width, height, created_at, local_path FROM attachments WHERE discussion_id = ? ORDER BY comment_number",
   );
 
   // Old URLs -> new topic paths, for rewriting links inside bodies.
@@ -260,6 +262,8 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
       const pid = postIdByNumber.get(f.comment_number);
       if (pid === undefined) continue; // attachment on an internal note
       const id = attachmentId(f.download_path);
+      if (importedAttachments.has(id)) continue;
+      importedAttachments.add(id);
       const type = f.content_type || "application/octet-stream";
       out.push(
         insert("attachments", {

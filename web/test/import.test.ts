@@ -37,10 +37,11 @@ function fixture(): DatabaseSync {
       (101, 1, 3, 'Bob', NULL, 'Uw pakket', 0, '2014-05-04T09:00:00Z', '{}'),
       (102, 1, 1, 'Ann', NULL, 'secret', 0, '${t}', '{}'),
       (103, 1, 1, 'Ann', NULL, 'private', 0, '${t}', '{}');
-    INSERT INTO attachments (download_path, discussion_id, comment_number, filename, content_type, size, raw) VALUES
-      ('/assets/abc/shot.png', 100, 1, 'shot.png', 'image/png', 1234, '{}'),
-      ('/assets/def/project.zip', 100, 5, 'project.zip', 'application/zip', 99999, '{}'),
-      ('/assets/ghi/note.txt', 100, 3, 'note.txt', 'text/plain', 1, '{}');
+    INSERT INTO attachments (download_path, download_url, discussion_id, comment_number, filename, content_type, size, raw) VALUES
+      ('/assets/abc/shot.png', 'https://s3.example/assets/abc/shot.png?Signature=1', 100, 1, 'shot.png', 'image/png', 1234, '{}'),
+      ('/assets/def/project.zip', 'https://s3.example/assets/def/project.zip?Signature=2', 100, 5, 'project.zip', 'application/zip', 99999, '{}'),
+      ('/assets/def/project.zip', 'https://s3.example/assets/def/project.zip?Signature=4', 100, 2, 'project.zip', 'application/zip', 99999, '{}'),
+      ('/assets/ghi/note.txt', 'https://s3.example/assets/ghi/note.txt?Signature=3', 100, 3, 'note.txt', 'text/plain', 1, '{}');
     -- Same shape as the spam filter's migrations/0002_spam.sql.
     CREATE TABLE spam_verdicts (discussion_id INTEGER NOT NULL, comment_number INTEGER NOT NULL, verdict TEXT NOT NULL, confidence REAL,
       source TEXT NOT NULL, reason TEXT, model TEXT, classified_at TEXT NOT NULL, PRIMARY KEY (discussion_id, comment_number));
@@ -81,7 +82,7 @@ test("converts a Tender export into forum rows", () => {
   const posts = db.prepare("SELECT topic_id, tender_number, status, body FROM posts ORDER BY id").all() as any[];
   assert.equal(posts.length, 5, "internal note left out");
   assert.deepEqual(posts.map((p) => `${p.topic_id}:${p.tender_number}:${p.status}`), ["100:1:visible", "100:2:visible", "100:4:spam", "100:5:visible", "101:1:spam"]);
-  const shot = attachmentId("/assets/abc/shot.png");
+  const shot = attachmentId(100, 1, "/assets/abc/shot.png");
   assert.match(posts[0].body, new RegExp(`!\\[shot\\]\\(/files/${shot}/shot.png\\)`), "attachment link rewritten");
   assert.match(posts[0].body, /\/t\/100\/crash-on-import/, "old discussion link rewritten");
 
@@ -90,11 +91,18 @@ test("converts a Tender export into forum rows", () => {
   assert.deepEqual(users.map((u) => u.email), ["ann@example.com", "bob@example.com", "guest@example.com"]);
   assert.equal(new Set((db.prepare("SELECT user_id FROM posts WHERE tender_number IN (1, 5) AND topic_id = 100").all() as any[]).map((r) => r.user_id)).size, 1);
 
-  const files = db.prepare("SELECT filename, r2_key, image_id FROM attachments ORDER BY filename").all().map((r) => ({ ...r }));
-  assert.deepEqual(files, [
-    { filename: "project.zip", r2_key: "tender/assets/def/project.zip", image_id: null },
-    { filename: "shot.png", r2_key: "tender/assets/abc/shot.png", image_id: `nodebox-forum-${shot}` },
+  // A file that hung on two Tender comments becomes two attachments, each with its own stored copy.
+  const files = db
+    .prepare("SELECT a.filename, p.tender_number, a.post_id, a.r2_key, a.image_id FROM attachments a JOIN posts p ON p.id = a.post_id ORDER BY a.filename, p.tender_number")
+    .all()
+    .map((r) => ({ ...r })) as any[];
+  // Each file sits in the folder of its post: posts/<post id>/<attachment id>/<filename>.
+  assert.deepEqual(files.map(({ post_id, ...f }) => ({ ...f, r2_key: f.r2_key.replace(`posts/${post_id}/`, "posts/N/") })), [
+    { filename: "project.zip", tender_number: 2, r2_key: `posts/N/${attachmentId(100, 2, "/assets/def/project.zip")}/project.zip`, image_id: null },
+    { filename: "project.zip", tender_number: 5, r2_key: `posts/N/${attachmentId(100, 5, "/assets/def/project.zip")}/project.zip`, image_id: null },
+    { filename: "shot.png", tender_number: 1, r2_key: `posts/N/${shot}/shot.png`, image_id: `nodebox-forum-${shot}` },
   ]);
+  assert.notEqual(files[0]!.r2_key, files[1]!.r2_key);
 
   assert.equal((db.prepare("SELECT topic_id FROM legacy_redirects WHERE path = '/discussions/problems/100-crash-on-import'").get() as any).topic_id, 100);
   const reasons = db.prepare("SELECT topic_id, tender_number, moderation_reason FROM posts WHERE status = 'spam' ORDER BY id").all().map((r) => ({ ...r }));

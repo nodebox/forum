@@ -74,9 +74,13 @@ export function attachmentLocalPath(downloadPath: string): string {
     .join("/");
 }
 
-/** Stable attachment id, so re-running the import (and the uploader) agree. */
-export function attachmentId(downloadPath: string): string {
-  return createHash("sha256").update(downloadPath).digest("base64url").slice(0, 16);
+/**
+ * Stable attachment id, so re-running the import (and the uploader) agree.
+ * An attachment belongs to one post: a file that hung on two Tender comments
+ * gets two ids, and so two stored copies.
+ */
+export function attachmentId(discussionId: number, commentNumber: number, downloadPath: string): string {
+  return createHash("sha256").update(`${discussionId}/${commentNumber}${downloadPath}`).digest("base64url").slice(0, 16);
 }
 
 const iso = (s: string | null | undefined) => (s ? new Date(s).toISOString() : null);
@@ -194,7 +198,7 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   for (const { d, comments, slug } of kept) {
     const files = attachmentsStmt.all(d.id) as any[];
     const fileUrlByPath = new Map<string, string>();
-    for (const f of files) fileUrlByPath.set(f.download_path, `/files/${attachmentId(f.download_path)}/${encodeURIComponent(f.filename ?? "file")}`);
+    for (const f of files) fileUrlByPath.set(f.download_path, `/files/${attachmentId(d.id, f.comment_number, f.download_path)}/${encodeURIComponent(f.filename ?? "file")}`);
 
     const rewrite = (text: string) =>
       text.replace(/(https?:\/\/[^\s)"'<>]+|\/assets\/[^\s)"'<>]+|\/discussions\/[^\s)"'<>]+)/g, (url) => {
@@ -259,14 +263,14 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     for (const f of files) {
       const pid = postIdByNumber.get(f.comment_number);
       if (pid === undefined) continue; // attachment on an internal note
-      const id = attachmentId(f.download_path);
+      const id = attachmentId(d.id, f.comment_number, f.download_path);
       const type = f.content_type || "application/octet-stream";
       out.push(
         insert("attachments", {
           id,
           user_id: postRows.find((r) => r.id === pid)!.user_id,
           post_id: pid,
-          r2_key: `tender/${attachmentLocalPath(f.download_path)}`,
+          r2_key: `posts/${pid}/${id}/${attachmentLocalPath(f.download_path).split("/").pop()}`,
           filename: f.filename ?? "file",
           content_type: type,
           size: f.size ?? 0,

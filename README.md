@@ -28,7 +28,7 @@ Output goes to `data/` (git-ignored):
   metadata and knowledge base articles. Each row keeps the untouched API JSON
   in a `raw` column next to the normalized columns.
 - `data/attachments/assets/<hash>/<filename>`: the attachment files, laid out
-  like Tender's download paths so the same path can be the R2 key.
+  like Tender's download paths.
 
 The run is sequential and polite: one request at a time with a 400 ms gap
 (`TENDER_DELAY_MS`), honouring `Retry-After` on 429 and backing off on 5xx.

@@ -393,6 +393,16 @@ export function messagePage(heading: string, message: string | Html, action?: { 
   </div>`;
 }
 
+/** Shown when the spam filter refuses a post. It gives no reason, so it teaches nothing about what to change. */
+export function refusedPage(): Html {
+  return messagePage(
+    "Your post was not posted",
+    html`Our spam filter thinks it is spam, so nobody else can see it. If that is a mistake, write to
+      <a href="mailto:info@nodebox.net">info@nodebox.net</a> and a person will look at it.`,
+    { href: "/", label: "Back to the forum" },
+  );
+}
+
 export function aupPage(): Html {
   return html`<article class="prose narrow-prose">
     <h1>Acceptable use</h1>

@@ -5,6 +5,7 @@
   "description": "The NodeBox forum: a Cloudflare Worker (Hono + D1 + R2 + Cloudflare Images).",
   "type": "module",
   "scripts": {
+    "env": "op inject -f -i .env.template -o .env && chmod 600 .env",
     "build:client": "node scripts/build-client.mjs",
     "dev": "npm run build:client && wrangler dev",
     "db:migrate:local": "wrangler d1 migrations apply nodebox-forum --local",

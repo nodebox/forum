@@ -22,6 +22,10 @@ page. To try the Google button, put `GOOGLE_CLIENT_ID` and
 Without `CF_ACCOUNT_ID`/`CF_IMAGES_TOKEN`/`CF_IMAGES_HASH`, images are served
 as originals from R2 instead of resized Cloudflare Images variants.
 
+The spam filter on new posts needs `ANTHROPIC_API_KEY`. `npm run env` writes it
+to `.env` from 1Password (`.env.template`, needs the `op` CLI signed in), and
+`wrangler dev` reads `.env`. Without the key no post is checked.
+
 ## Admins
 
 The first admin comes from the command line; after that, admins promote others
@@ -70,5 +74,8 @@ moderation, CSRF and old-URL redirects.
 4. In Cloudflare Images, create the variants `nodebox-forum-post` (1200 px wide,
    scale down) and `nodebox-forum-thumb` (400 px).
 5. Secrets: `wrangler secret put` for `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-   `CF_ACCOUNT_ID`, `CF_IMAGES_TOKEN`, `CF_IMAGES_HASH`.
+   `CF_ACCOUNT_ID`, `CF_IMAGES_TOKEN`, `CF_IMAGES_HASH`, and `ANTHROPIC_API_KEY`
+   for the spam filter:
+   `op read "op://NodeBox/NodeBox Forum/Anthropic/ANTHROPIC_API_KEY" | npx wrangler secret put ANTHROPIC_API_KEY`.
+   Without that key no post is checked.
 6. `npx wrangler d1 migrations apply nodebox-forum --remote`, then `npm run deploy`.

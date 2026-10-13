@@ -182,6 +182,25 @@ Topic authors can mark their own topic solved.
   applies the review decisions and the confidence threshold, and carries the
   reason.
 
+**Decided (Frederik, 2026-10-13):** the forum keeps a spam filter on new
+posts (`web/src/spamfilter.ts`), on Claude Haiku 5.5 like the import's filter.
+There is no queue to work through:
+
+- Only accounts with fewer than 3 visible posts are checked.
+- A post the filter calls spam at confidence 0.9 or higher is not published.
+  Its author is told so, without a reason, and given a contact address.
+- Three refused posts ban the account, so the filter can't be probed for long.
+- Everything else is published: a doubtful verdict, an error, a slow answer,
+  or no key at all.
+- A refused post is stored hidden, restorable from `/admin`, and deleted with
+  its files after 30 days by the hourly cron.
+
+The key is the Worker secret `ANTHROPIC_API_KEY`, from
+`op://NodeBox/NodeBox Forum/Anthropic/ANTHROPIC_API_KEY`. The privacy notice
+has to say that posts from new accounts are sent to Anthropic for this, that
+a post can be refused on that basis, and how to contest it; that page is not
+written yet.
+
 The acceptable use policy is a short page at `/aup` with six rules; each
 removal reason in the Moderate menu is one of them. It was written for this
 forum, not copied, and hasn't had a legal review. Its contact address
@@ -231,8 +250,9 @@ data came over from Tender.
 3. Knowledge-base articles: import as a "Guides" category, or move them to the
    NodeBox docs site?
 4. Who the admins are on day one.
-5. Should imported users who never posted be imported at all? Data
-   minimisation says no; the code imports only users who wrote something.
+5. Imported users (decided, Frederik, 2026-10-13): only people with at least
+   one visible public post come over. Hidden spam by anyone else stays in the
+   export.
 
 ## 7. Build order
 

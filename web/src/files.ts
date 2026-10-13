@@ -175,6 +175,16 @@ export async function uploadToImages(env: Bindings, imageId: string, filename: s
   return imageId;
 }
 
+/** Delete a post's files: the R2 objects, their Cloudflare Images copies and the rows. */
+export async function deletePostFiles(env: Bindings, postId: number): Promise<void> {
+  const { results } = await env.DB.prepare("SELECT * FROM attachments WHERE post_id = ?").bind(postId).all<Attachment>();
+  for (const a of results) {
+    await env.FILES.delete(a.r2_key);
+    if (a.image_id) await deleteFromImages(env, a.image_id);
+  }
+  await env.DB.prepare("DELETE FROM attachments WHERE post_id = ?").bind(postId).run();
+}
+
 async function deleteFromImages(env: Bindings, imageId: string): Promise<void> {
   if (!env.CF_ACCOUNT_ID || !env.CF_IMAGES_TOKEN) return;
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/images/v1/${encodeURIComponent(imageId)}`, {

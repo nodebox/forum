@@ -44,13 +44,14 @@ async function postInfo(db: D1Database, postId: number): Promise<PostInfo | null
 /**
  * Set a post's status (visible, spam, removed) and keep the counts right.
  * Hiding the opening post hides the whole topic; restoring it brings the topic back.
+ * `admin` is null when the spam filter acts.
  * Returns the topic id, or null when the post doesn't exist.
  */
 export async function setPostStatus(
   db: D1Database,
   postId: number,
   status: PostStatus,
-  admin: User,
+  admin: User | null,
   reason: string | null,
 ): Promise<{ topicId: number; topicHidden: boolean } | null> {
   const p = await postInfo(db, postId);
@@ -60,8 +61,8 @@ export async function setPostStatus(
   const stmts: D1PreparedStatement[] = [
     db
       .prepare("UPDATE posts SET status = ?, moderated_by = ?, moderated_at = ?, moderation_reason = ? WHERE id = ?")
-      .bind(status, admin.id, t, status === "visible" ? null : reason, postId),
-    log(db, { adminId: admin.id, action: status === "visible" ? "restore" : status === "spam" ? "spam" : "remove", postId, topicId: p.topic_id, userId: p.user_id, reason }),
+      .bind(status, admin?.id ?? null, t, status === "visible" ? null : reason, postId),
+    log(db, { adminId: admin?.id ?? null, action: status === "visible" ? "restore" : status === "spam" ? "spam" : "remove", postId, topicId: p.topic_id, userId: p.user_id, reason }),
   ];
   const wasVisible = p.status === "visible";
   const nowVisible = status === "visible";
@@ -92,11 +93,11 @@ function recountTopic(db: D1Database, topicId: number): D1PreparedStatement[] {
 }
 
 /** Ban a user and mark all their visible posts as spam (for spam accounts). */
-export async function banUser(db: D1Database, userId: number, admin: User, alsoSpamPosts: boolean): Promise<void> {
+export async function banUser(db: D1Database, userId: number, admin: User | null, alsoSpamPosts: boolean): Promise<void> {
   await db.batch([
     db.prepare("UPDATE users SET banned_at = ? WHERE id = ? AND is_admin = 0").bind(now(), userId),
     db.prepare("DELETE FROM sessions WHERE user_id = ?").bind(userId),
-    log(db, { adminId: admin.id, action: "ban", userId }),
+    log(db, { adminId: admin?.id ?? null, action: "ban", userId }),
   ]);
   if (!alsoSpamPosts) return;
   const { results } = await db

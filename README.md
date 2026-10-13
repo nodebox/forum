@@ -13,12 +13,12 @@ Needs Node 22.18 or later (it runs the TypeScript directly and uses the built-in
 
 ```sh
 npm install                # dev tools only (typescript, @types/node)
-npm run env                # writes .env from 1Password (op inject on .env.tpl)
+npm run env                # writes .env from 1Password (op inject on .env.template)
 npm run export -- ping     # check the key and site name
 npm run export             # everything; safe to stop and re-run
 ```
 
-The key lives in 1Password at `op://NodeBox/NodeBox Tender Forum/credential`.
+The key lives in 1Password at `op://NodeBox/NodeBox Forum/Tender/READONLY_API_KEY`.
 `npm run env` needs the 1Password CLI (`op`) signed in. Without 1Password, copy
 `.env.example` to `.env` and fill it in by hand.
 
@@ -64,7 +64,7 @@ npm run spam -- stats
 ```
 
 It needs `ANTHROPIC_API_KEY` in `.env`; `npm run env` fills it in from 1Password
-(`op://NodeBox/NodeBox Tender Forum/ANTHROPIC_API_KEY`). The model is
+(`op://NodeBox/NodeBox Forum/Anthropic/ANTHROPIC_API_KEY`). The model is
 `claude-haiku-5-5` at low effort; `SPAM_MODEL` picks another one.
 
 How a discussion is decided:

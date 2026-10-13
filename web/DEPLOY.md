@@ -1,15 +1,28 @@
 # Deploying the forum
 
-Pushes to `main` that touch `web/` run `.github/workflows/forum.yml`:
+Cloudflare Workers Builds deploys the forum on every push to `main`. In the
+Worker's settings (Workers & Pages → nodebox-forum → Settings → Build):
 
-1. **test**: `npm ci`, typecheck, tests. Runs on pull requests too.
-2. **deploy** (main only, and only once the repository variable
-   `DEPLOY_ENABLED` is `true`): builds the client, applies new D1 migrations
-   (`wrangler d1 migrations apply --remote`), then `wrangler deploy`.
+| Setting | Value |
+| --- | --- |
+| Git repository | `nodebox/forum`, production branch `main` |
+| Root directory | `web` |
+| Build command | `npm run ci:build` (typecheck, tests, client bundle) |
+| Deploy command | `npm run ci:deploy` (D1 migrations, then `wrangler deploy`) |
+| Non-production branch builds | Off. Preview versions would use the production D1 database and R2 bucket |
 
-Migrations run before the new code is live, so every migration must keep the
-running version working: add tables and columns, don't drop or rename them in
-the same release.
+A failing test stops the build, so nothing is deployed. Migrations run before
+the new code is live, so every migration must keep the running version
+working: add tables and columns, don't drop or rename them in the same
+release. Node comes from `web/.node-version` (22).
+
+The build's API token needs **D1 → Edit** on top of the Workers permissions,
+or the migration step fails with an authorisation error. If the token
+Cloudflare creates for the build lacks it, edit that token (or pick one that
+has it) under the build settings.
+
+GitHub Actions (`.github/workflows/forum.yml`) only runs the tests on pull
+requests; it holds no Cloudflare credentials.
 
 ## One-time setup
 
@@ -21,19 +34,14 @@ the same release.
 | Email | Onboard `nodebox.net` for Email Sending in the dashboard; sender is `MAIL_FROM` (`forum@nodebox.net`) |
 | Images | Variants `nodebox-forum-post` (1200 px wide) and `nodebox-forum-thumb` (400 px) |
 | Worker secrets | `npx wrangler secret put CF_ACCOUNT_ID`, `CF_IMAGES_TOKEN` (Images: Edit), `CF_IMAGES_HASH` |
-| GitHub secrets | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
-| GitHub variable | `DEPLOY_ENABLED` = `true` when the above is done |
-| Approval (optional) | Settings → Environments → `production` → Required reviewers |
-
-The API token for GitHub: start from the "Edit Cloudflare Workers" template
-and add **Account → D1 → Edit**. Limit it to the NodeBox account and the
-`nodebox.net` zone.
+| Git connection | The build settings above. Connect it last: the first build deploys |
 
 ## First deploy
 
-1. Merge with `DEPLOY_ENABLED` unset: only tests run.
-2. Set the secrets and the variable, then run the workflow (Actions → Forum →
-   Run workflow). It creates the schema in the empty D1 database and deploys.
+1. Merge this setup to `main` with the database id filled in. Nothing deploys
+   while the repository isn't connected in Cloudflare.
+2. Connect the repository in the build settings. The first build creates the
+   schema in the empty D1 database and deploys.
 3. Load the Tender data from the machine that has `data/` (it contains email
    addresses; it never goes to GitHub):
    `npx wrangler d1 execute nodebox-forum --remote --file ../data/import.sql`

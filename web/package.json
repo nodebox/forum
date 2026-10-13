@@ -11,6 +11,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply nodebox-forum --remote",
     "db:seed:local": "wrangler d1 execute nodebox-forum --local --file seed/dev.sql",
     "deploy": "npm run build:client && wrangler deploy",
+    "ci:build": "npm run typecheck && npm test && npm run build:client",
+    "ci:deploy": "wrangler d1 migrations apply nodebox-forum --remote && wrangler deploy",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",

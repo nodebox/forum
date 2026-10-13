@@ -36,5 +36,5 @@
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
   //   CF_ACCOUNT_ID, CF_IMAGES_TOKEN, CF_IMAGES_HASH (the account hash in imagedelivery.net URLs)
-  // Deploys run from GitHub Actions (.github/workflows/forum.yml) on every push to main.
+  // Deploys run in Cloudflare Workers Builds on every push to main (web/DEPLOY.md).
 }

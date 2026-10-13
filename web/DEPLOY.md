@@ -32,7 +32,7 @@ requests; it holds no Cloudflare credentials.
 | R2 bucket | `npx wrangler r2 bucket create nodebox-forum` |
 | Hostname | `forum.nodebox.net` in `wrangler.jsonc` (`routes`). The `nodebox.net` zone must be on the same Cloudflare account |
 | Email | Onboard `nodebox.net` for Email Sending in the dashboard; sender is `MAIL_FROM` (`forum@nodebox.net`) |
-| Images | Variants `nodebox-forum-post` (1200 px wide) and `nodebox-forum-thumb` (400 px) |
+| Images | Uses the account's existing variants `medium` (1000 px wide, in posts) and `thumb` (600 × 600, galleries) |
 | Worker secrets | `npx wrangler secret put CF_ACCOUNT_ID`, `CF_IMAGES_TOKEN` (Images: Edit), `CF_IMAGES_HASH` |
 | Git connection | The build settings above. Connect it last: the first build deploys |
 

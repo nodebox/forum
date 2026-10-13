@@ -25,10 +25,10 @@
     // Absolute origin, used in sign-in emails and the Google redirect URI.
     // These are the production values; `npm run dev` overrides PUBLIC_URL and MAILER.
     "PUBLIC_URL": "https://forum.nodebox.net",
-    // Cloudflare Images: ids and variant names are global to the account, so everything is prefixed.
+    // Cloudflare Images: image ids are global to the account, so they are prefixed. The variants are the account's shared ones.
     "CF_IMAGES_PREFIX": "nodebox-forum-",
-    "CF_IMAGES_VARIANT_POST": "nodebox-forum-post",
-    "CF_IMAGES_VARIANT_THUMB": "nodebox-forum-thumb",
+    "CF_IMAGES_VARIANT_POST": "medium",
+    "CF_IMAGES_VARIANT_THUMB": "thumb",
     // "cloudflare" sends real mail; "log" prints sign-in links to the console (development).
     "MAILER": "cloudflare",
     "MAIL_FROM": "forum@nodebox.net"

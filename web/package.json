@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "import:tender": "node --disable-warning=ExperimentalWarning scripts/import-tender.ts",
+    "upload:attachments": "node --disable-warning=ExperimentalWarning scripts/upload-attachments.ts",
     "admin": "node --disable-warning=ExperimentalWarning scripts/admin.ts"
   },
   "dependencies": {

@@ -46,11 +46,13 @@ log at `/admin/log`.
 ```sh
 npm run import:tender                         # ../data/forum.sqlite → ../data/import.sql
 npx wrangler d1 execute nodebox-forum --local --file ../data/import.sql
+npm run upload:attachments                    # ../data/attachments → local R2
 ```
 
 Run it against an empty, freshly migrated database. If the spam filter
 (`npm run spam` in the repo root) has run, everything in its `spam_excluded`
-view comes in with status `spam` (hidden, restorable from `/admin`).
+view comes in with status `spam` (hidden, restorable from `/admin`). To start
+over, delete `.wrangler/state` and run `npm run db:migrate:local` first.
 
 ## Tests
 

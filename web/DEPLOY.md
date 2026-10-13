@@ -30,7 +30,7 @@ requests; it holds no Cloudflare credentials.
 | --- | --- |
 | D1 database | Created; its id is in `wrangler.jsonc` |
 | R2 bucket | `npx wrangler r2 bucket create nodebox-forum` |
-| Hostname | `forum.nodebox.net` in `wrangler.jsonc` (`routes`). The `nodebox.net` zone must be on the same Cloudflare account |
+| Hostname | After the first deploy: add `forum.nodebox.net` as a custom domain (`routes` in `wrangler.jsonc`). Until then the forum runs on its workers.dev URL |
 | Email | Onboard `nodebox.net` for Email Sending in the dashboard; sender is `MAIL_FROM` (`forum@nodebox.net`) |
 | Images | Uses the account's existing variants `medium` (1000 px wide, in posts) and `thumb` (600 × 600, galleries) |
 | Worker secrets | `npm run secrets` copies `CF_ACCOUNT_ID`, `CF_IMAGES_HASH`, `CF_IMAGES_TOKEN` from 1Password (`op://NodeBox/NodeBox Forum/Cloudflare/…`) |

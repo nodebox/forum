@@ -5,9 +5,8 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "public", "binding": "ASSETS" },
-  // Production hostname. The nodebox.net zone must be on this Cloudflare account; the deploy creates the DNS record.
-  "routes": [{ "pattern": "forum.nodebox.net", "custom_domain": true }],
-  "workers_dev": false,
+  // Runs on the workers.dev URL until the forum.nodebox.net custom domain is added (after the first deploy).
+  "workers_dev": true,
   "observability": { "enabled": true },
   "d1_databases": [
     { "binding": "DB", "database_name": "nodebox-forum", "database_id": "c66a199f-225d-46eb-baff-0f16b4696a41", "migrations_dir": "migrations" }

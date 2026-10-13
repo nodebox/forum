@@ -7,6 +7,7 @@ import path from "node:path";
 import { getPlatformProxy } from "wrangler";
 import { app } from "../src/app.ts";
 import { sendDigests } from "../src/notifications.ts";
+import { sweepPending } from "../src/files.ts";
 
 const persist = fs.mkdtempSync(path.join(os.tmpdir(), "forum-test-"));
 let proxy: Awaited<ReturnType<typeof getPlatformProxy>>;
@@ -74,12 +75,29 @@ test("sign in, post, react, moderate", async () => {
   fd.append("file", new File([new Uint8Array([80, 75, 3, 4])], "project.zip", { type: "application/zip" }));
   const up = await (await req("/uploads", { method: "POST", cookie: alice, body: fd })).json() as any;
   assert.equal(up.isImage, false);
-  await req(`/t/${topicId}/reply`, { method: "POST", cookie: alice, body: form({ body: "Here's the project", attachments: up.id }) });
+  const key = async () => (await env.DB.prepare("SELECT r2_key FROM attachments WHERE id = ?").bind(up.id).first()).r2_key as string;
+  // Until the post exists the file waits in pending/; posting moves it into the post's folder.
+  const pendingKey = await key();
+  assert.equal(pendingKey, `pending/${up.id}/project.zip`);
+  res = await req(`/t/${topicId}/reply`, { method: "POST", cookie: alice, body: form({ body: "Here's the project", attachments: up.id }) });
+  const projectPost = Number(/#post-(\d+)/.exec(res.headers.get("location")!)![1]);
+  assert.equal(await key(), `posts/${projectPost}/${up.id}/project.zip`);
+  assert.equal(await env.FILES.head(pendingKey), null);
+  assert.ok(await env.FILES.head(await key()));
   html = await (await req(topicPath)).text();
   assert.match(html, /project\.zip/);
   const dl = await req(`/files/${up.id}/project.zip`);
   assert.equal(dl.status, 200);
   assert.match(dl.headers.get("content-disposition")!, /^attachment/);
+
+  // A file on the first post of a new topic moves the same way.
+  const fd2 = new FormData();
+  fd2.append("file", new File([new Uint8Array([1, 2, 3])], "sketch.ndbx"));
+  const up2 = await (await req("/uploads", { method: "POST", cookie: alice, body: fd2 })).json() as any;
+  res = await req("/new", { method: "POST", cookie: alice, body: form({ title: "A sketch", category: "questions", body: "See attached", attachments: up2.id }) });
+  assert.equal(res.status, 302);
+  const sketch = await env.DB.prepare("SELECT post_id, r2_key FROM attachments WHERE id = ?").bind(up2.id).first();
+  assert.equal(sketch.r2_key, `posts/${sketch.post_id}/${up2.id}/sketch.ndbx`);
 
   // Reactions toggle.
   const firstPost = Number(/id="post-(\d+)"/.exec(html)![1]);
@@ -198,4 +216,30 @@ test("watching, grouped digests, hearts, your topics", async () => {
   assert.deepEqual(r.reactions.map((x: any) => [x.emoji, x.count, x.mine]), [["❤️", 1, true]]);
   const page = await (await req(topics[1]!, { cookie: bob })).text();
   assert.match(page, /class="reaction heart has mine"/);
+});
+
+test("the sweep removes abandoned uploads and finishes interrupted moves", async () => {
+  const carol = await signIn("carol@example.com");
+  const upload = async (name: string) => {
+    const fd = new FormData();
+    fd.append("file", new File([new Uint8Array([1, 2, 3])], name));
+    return (await (await req("/uploads", { method: "POST", cookie: carol, body: fd })).json()) as any;
+  };
+  const row = (id: string) => env.DB.prepare("SELECT post_id, r2_key FROM attachments WHERE id = ?").bind(id).first();
+  const abandoned = await upload("abandoned.zip");
+  const interrupted = await upload("interrupted.zip");
+  // A post claimed this file, but the move into its folder never happened.
+  const post = await env.DB.prepare("SELECT id FROM posts LIMIT 1").first();
+  await env.DB.prepare("UPDATE attachments SET post_id = ? WHERE id = ?").bind(post.id, interrupted.id).run();
+
+  assert.deepEqual(await sweepPending(env), { removed: 0, moved: 0 }, "uploads from the last day are left alone");
+  assert.ok(await row(abandoned.id));
+
+  const tomorrow = Date.now() + 25 * 3600 * 1000;
+  assert.deepEqual(await sweepPending(env, tomorrow), { removed: 1, moved: 1 });
+  assert.equal(await row(abandoned.id), null);
+  assert.equal(await env.FILES.head(`pending/${abandoned.id}/abandoned.zip`), null);
+  assert.equal((await row(interrupted.id)).r2_key, `posts/${post.id}/${interrupted.id}/interrupted.zip`);
+  assert.equal((await req(`/files/${interrupted.id}/interrupted.zip`)).status, 200);
+  assert.equal((await env.FILES.list({ prefix: "pending/" })).objects.length, 0);
 });

@@ -41,6 +41,65 @@ export function guessType(filename: string, given: string): string {
   return (ext && map[ext]) || "application/octet-stream";
 }
 
+const PENDING_PREFIX = "pending/";
+
+/** Where an attachment's file lives once it belongs to a post. One attachment, one post, one folder. */
+export function postFileKey(postId: number, a: Pick<Attachment, "id" | "filename">): string {
+  return `posts/${postId}/${a.id}/${a.filename}`;
+}
+
+/**
+ * Move a post's freshly uploaded files from pending/ into the post's folder.
+ * R2 has no rename, so this copies, repoints the row, then deletes the old
+ * object; whatever a failure leaves behind, the row points at a file that exists.
+ */
+export async function settleAttachments(env: Bindings, postId: number): Promise<void> {
+  const { results } = await env.DB.prepare(`SELECT * FROM attachments WHERE post_id = ? AND r2_key LIKE '${PENDING_PREFIX}%'`).bind(postId).all<Attachment>();
+  for (const a of results) {
+    const from = a.r2_key;
+    const obj = await env.FILES.get(from);
+    if (!obj) continue;
+    const to = postFileKey(postId, a);
+    await env.FILES.put(to, obj.body, { httpMetadata: obj.httpMetadata, customMetadata: obj.customMetadata });
+    await env.DB.prepare("UPDATE attachments SET r2_key = ? WHERE id = ?").bind(to, a.id).run();
+    await env.FILES.delete(from);
+  }
+}
+
+/** How long an upload may wait for its post before the sweep removes it. */
+const PENDING_MAX_AGE_MS = 24 * 3600 * 1000;
+
+/**
+ * Clean up pending/: remove uploads that no post claimed within a day (the
+ * file, its Cloudflare Images copy and its row), and finish the move for files
+ * whose post exists. Runs from the hourly cron.
+ */
+export async function sweepPending(env: Bindings, nowMs = Date.now()): Promise<{ removed: number; moved: number }> {
+  const cutoff = nowMs - PENDING_MAX_AGE_MS;
+  const result = { removed: 0, moved: 0 };
+  let cursor: string | undefined;
+  do {
+    const page = await env.FILES.list({ prefix: PENDING_PREFIX, cursor });
+    for (const obj of page.objects) {
+      if (obj.uploaded.getTime() > cutoff) continue;
+      const a = await env.DB.prepare("SELECT * FROM attachments WHERE r2_key = ?").bind(obj.key).first<Attachment>();
+      if (a?.post_id != null) {
+        await settleAttachments(env, a.post_id);
+        result.moved++;
+        continue;
+      }
+      await env.FILES.delete(obj.key);
+      if (a) {
+        if (a.image_id) await deleteFromImages(env, a.image_id);
+        await env.DB.prepare("DELETE FROM attachments WHERE id = ? AND post_id IS NULL").bind(a.id).run();
+      }
+      result.removed++;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return result;
+}
+
 export class UploadError extends Error {
   readonly status: 400 | 413 | 415 | 429;
   constructor(message: string, status: 400 | 413 | 415 | 429 = 400) {
@@ -51,7 +110,8 @@ export class UploadError extends Error {
 
 /**
  * Store an upload in R2 and, for images, in Cloudflare Images. Returns the
- * attachment row (not yet linked to a post).
+ * attachment row (not yet linked to a post). The file waits under pending/
+ * until its post exists; see settleAttachments.
  */
 export async function storeUpload(env: Bindings, db: D1Database, userId: number, file: File): Promise<Attachment> {
   if (file.size === 0) throw new UploadError("That file is empty.");
@@ -60,8 +120,7 @@ export async function storeUpload(env: Bindings, db: D1Database, userId: number,
   if (BLOCKED_EXTENSIONS.test(filename)) throw new UploadError("That kind of file can't be attached.", 415);
   const contentType = guessType(filename, file.type);
   const id = randomId(12);
-  const day = new Date().toISOString().slice(0, 10).replace(/-/g, "/");
-  const r2Key = `uploads/${day}/${id}/${filename}`;
+  const r2Key = `${PENDING_PREFIX}${id}/${filename}`;
   const bytes = await file.arrayBuffer();
   await env.FILES.put(r2Key, bytes, {
     httpMetadata: { contentType, contentDisposition: dispositionFor(filename, contentType) },
@@ -114,6 +173,15 @@ export async function uploadToImages(env: Bindings, imageId: string, filename: s
     return null;
   }
   return imageId;
+}
+
+async function deleteFromImages(env: Bindings, imageId: string): Promise<void> {
+  if (!env.CF_ACCOUNT_ID || !env.CF_IMAGES_TOKEN) return;
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/images/v1/${encodeURIComponent(imageId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${env.CF_IMAGES_TOKEN}` },
+  });
+  if (!res.ok && res.status !== 404) console.error(`Cloudflare Images delete failed for ${imageId}: ${res.status} ${await res.text()}`);
 }
 
 /** Where to show an image attachment: a resized variant if we have one, else the original. */

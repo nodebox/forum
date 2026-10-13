@@ -69,7 +69,7 @@ Mapping:
 | comments (not `internal`, not `system_message`) | posts; comment 1 is the opening post |
 | users                          | users, deduplicated on lowercased email |
 | authors without a user row     | placeholder users with no email (cannot sign in) |
-| attachments                    | attachments; files go to R2 under `tender/<download path>` |
+| attachments                    | attachments, one per post; files go to R2 under `posts/<post id>/<attachment id>/<filename>` |
 | image attachments              | also uploaded to Cloudflare Images      |
 | `html_href`                    | `legacy_redirects` (old path → new topic) |
 
@@ -84,10 +84,11 @@ how many contain HTML or Tender-specific syntax; if many do, we convert
 `formatted_body` through a sanitizer instead. Links in bodies that point at old
 attachment URLs or old discussion URLs get rewritten to the new ones.
 
-Uploading the files is a separate script (`upload-attachments.ts`, to write
-once the export is in): it walks `data/attachments/`, puts each file in R2
-through the S3-compatible API and pushes images to Cloudflare Images. It is
-resumable in the same way the exporter is.
+Uploading the files is a separate script (`web/scripts/upload-attachments.ts`):
+it reads the forum's attachment rows, finds each file in `data/attachments/`
+and puts it in R2 under the row's key. It is resumable in the same way the
+exporter is. It fills local R2 only; the remote bucket (through the
+S3-compatible API) and Cloudflare Images are still to write.
 
 ## 3. Attachments and screenshots
 
@@ -100,6 +101,11 @@ resumable in the same way the exporter is.
 - Everything else (ZIPs with `.ndbx` projects, loose `.ndbx` files) becomes a
   download card under the post with name, size and type. Downloads are served
   by the Worker from R2 with `Content-Disposition: attachment`.
+- One attachment belongs to one post, and its file sits in that post's folder
+  in R2: `posts/<post id>/<attachment id>/<filename>`. A file is uploaded
+  before its post exists, so it waits under `pending/<attachment id>/` and
+  moves when the post is submitted. The hourly cron removes pending files
+  that no post claimed within a day.
 - Limit: 50 MB per file (Workers accept request bodies up to 100 MB on the
   free and Pro plans). Executables are refused.
 

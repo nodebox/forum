@@ -14,7 +14,7 @@
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "nodebox-forum" }
   ],
-  // Hourly: send grouped reply digests (src/notifications.ts).
+  // Hourly: send grouped reply digests (src/notifications.ts) and sweep abandoned uploads (src/files.ts).
   "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     "SITE_NAME": "NodeBox Forum",

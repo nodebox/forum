@@ -10,8 +10,7 @@
   "workers_dev": false,
   "observability": { "enabled": true },
   "d1_databases": [
-    // Create with `wrangler d1 create nodebox-forum` and paste the id here.
-    { "binding": "DB", "database_name": "nodebox-forum", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "nodebox-forum", "database_id": "c66a199f-225d-46eb-baff-0f16b4696a41", "migrations_dir": "migrations" }
   ],
   // Cloudflare Email Sending, for sign-in links. The sending domain must be onboarded in the dashboard.
   "send_email": [{ "name": "EMAIL" }],

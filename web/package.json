@@ -11,6 +11,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply nodebox-forum --remote",
     "db:seed:local": "wrangler d1 execute nodebox-forum --local --file seed/dev.sql",
     "deploy": "npm run build:client && wrangler deploy",
+    "secrets": "sh scripts/put-secrets.sh",
     "ci:build": "npm run typecheck && npm test && npm run build:client",
     "ci:deploy": "wrangler d1 migrations apply nodebox-forum --remote && wrangler deploy",
     "types": "wrangler types",

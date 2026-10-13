@@ -10,8 +10,9 @@
 //
 // What comes over: public categories; open/assigned/resolved public discussions
 // (resolved becomes "solved"); comments that aren't internal notes or system
-// messages; the users who wrote them (deduplicated on email); attachment
-// metadata (files are uploaded separately); old URLs for redirects.
+// messages; the users who wrote at least one visible post (deduplicated on
+// email); attachment metadata (files are uploaded separately); old URLs for
+// redirects.
 // Items the spam filter flagged (the `spam_excluded` view, if present) are
 // imported with status 'spam': hidden, but admins can restore them.
 import { DatabaseSync } from "node:sqlite";
@@ -194,6 +195,17 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   }
 
   const categoryCounts = new Map<number, number>();
+  const visibleAuthors = new Set<number>();
+  const built: {
+    d: any;
+    slug: string;
+    topicStatus: string;
+    postRows: Record<string, unknown>[];
+    files: any[];
+    postIdByNumber: Map<number, number>;
+    visible: number;
+    last: { at: string; user: number } | null;
+  }[] = [];
   let postId = 0;
   for (const { d, comments, slug } of kept) {
     const files = attachmentsStmt.all(d.id) as any[];
@@ -214,7 +226,6 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
 
     const topicSpam = spamDiscussions.get(d.id) ?? (spamComments.has(`${d.id}:${comments[0].number}`) ? spamComments.get(`${d.id}:${comments[0].number}`)! : null);
     const topicStatus = topicSpam ? "spam" : "visible";
-    const authorId = userFor(d.user_id ?? comments[0].user_id, d.author_name ?? comments[0].author_name, d.author_email ?? comments[0].author_email, d.created_at);
     const postRows: Record<string, unknown>[] = [];
     let visible = 0;
     let last: { at: string; user: number } | null = null;
@@ -240,8 +251,25 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
       if (status === "visible") {
         visible++;
         last = { at: created, user: userId };
-      } else stats.spamPosts++;
+        visibleAuthors.add(userId);
+      }
     }
+    built.push({ d, slug, topicStatus, postRows, files, postIdByNumber, visible, last });
+  }
+
+  // Only people with a visible post come over. What such a person leaves behind
+  // is hidden spam, and it stays in the export: those posts are dropped, and a
+  // topic with no post left is dropped with them.
+  for (const { d, slug, topicStatus, postRows: allPosts, files, postIdByNumber, visible, last } of built) {
+    const postRows = allPosts.filter((r) => visibleAuthors.has(r.user_id as number));
+    if (postRows.length === 0) {
+      stats.skippedDiscussions++;
+      continue;
+    }
+    const keptPostIds = new Set(postRows.map((r) => r.id));
+    // The topic's author is whoever wrote its first post.
+    const authorId = postRows[0]!.user_id as number;
+    stats.spamPosts += postRows.filter((r) => r.status !== "visible").length;
     const created = iso(d.created_at) ?? (postRows[0]!.created_at as string);
     out.push(
       insert("topics", {
@@ -262,7 +290,7 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     for (const row of postRows) out.push(insert("posts", row));
     for (const f of files) {
       const pid = postIdByNumber.get(f.comment_number);
-      if (pid === undefined) continue; // attachment on an internal note
+      if (pid === undefined || !keptPostIds.has(pid)) continue; // attachment on an internal note or a dropped post
       const id = attachmentId(d.id, f.comment_number, f.download_path);
       const type = f.content_type || "application/octet-stream";
       out.push(
@@ -295,10 +323,10 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   for (const [catId, n] of categoryCounts) out.push(`UPDATE categories SET topic_count = ${n} WHERE id = ${catId};`);
 
   // Users go first so foreign keys resolve.
-  const userStatements = [...users.values()].map((u) =>
-    insert("users", { id: u.id, email: u.email, name: u.name, created_at: u.created_at, tender_id: u.tender_id }),
-  );
-  stats.users = users.size;
+  const userStatements = [...users.values()]
+    .filter((u) => visibleAuthors.has(u.id))
+    .map((u) => insert("users", { id: u.id, email: u.email, name: u.name, created_at: u.created_at, tender_id: u.tender_id }));
+  stats.users = userStatements.length;
   return { statements: [...userStatements, ...out], stats };
 }
 

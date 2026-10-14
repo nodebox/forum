@@ -1,0 +1,26 @@
+# Tests every pull request that touches the forum app, so a red PR shows
+# before merging. Deploys happen in Cloudflare Workers Builds (see web/DEPLOY.md).
+name: Forum
+
+on:
+  pull_request:
+    paths: ["web/**", ".github/workflows/forum.yml"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

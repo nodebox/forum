@@ -12,7 +12,7 @@ Replaces the Tender-hosted NodeBox forum with our own on Cloudflare. `docs/PLAN.
 
 - Branch policy: commit straight to `main` and push. No pull requests.
 - Verify: `npm test && npm run typecheck` in the root, and the same two commands in `web/`.
-- Deploy: none yet. The Cloudflare resources do not exist; `web/README.md` lists what to create.
+- Deploy: Cloudflare Workers Builds deploys `web/` on every push to `main` (tests, D1 migrations, then deploy). Setup and rollback: `web/DEPLOY.md`.
 - Secrets come from 1Password: `npm run env` writes `.env` from `.env.template`.
 
 ## Rules of the data

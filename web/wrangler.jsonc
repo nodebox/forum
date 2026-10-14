@@ -5,9 +5,11 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "public", "binding": "ASSETS" },
+  // Runs on the workers.dev URL until the forum.nodebox.net custom domain is added (after the first deploy).
+  "workers_dev": true,
+  "observability": { "enabled": true },
   "d1_databases": [
-    // Create with `wrangler d1 create nodebox-forum` and paste the id here.
-    { "binding": "DB", "database_name": "nodebox-forum", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "nodebox-forum", "database_id": "c66a199f-225d-46eb-baff-0f16b4696a41", "migrations_dir": "migrations" }
   ],
   // Cloudflare Email Sending, for sign-in links. The sending domain must be onboarded in the dashboard.
   "send_email": [{ "name": "EMAIL" }],
@@ -20,17 +22,19 @@
   "vars": {
     "SITE_NAME": "NodeBox Forum",
     // Absolute origin, used in sign-in emails and the Google redirect URI.
-    "PUBLIC_URL": "http://localhost:8787",
-    // Cloudflare Images: ids and variant names are global to the account, so everything is prefixed.
+    // These are the production values; `npm run dev` overrides PUBLIC_URL and MAILER.
+    "PUBLIC_URL": "https://forum.nodebox.net",
+    // Cloudflare Images: image ids are global to the account, so they are prefixed. The variants are the account's shared ones.
     "CF_IMAGES_PREFIX": "nodebox-forum-",
-    "CF_IMAGES_VARIANT_POST": "nodebox-forum-post",
-    "CF_IMAGES_VARIANT_THUMB": "nodebox-forum-thumb",
-    // "log" prints sign-in links to the console (development); "cloudflare" sends real mail.
-    "MAILER": "log",
+    "CF_IMAGES_VARIANT_POST": "medium",
+    "CF_IMAGES_VARIANT_THUMB": "thumb",
+    // "cloudflare" sends real mail; "log" prints sign-in links to the console (development).
+    "MAILER": "cloudflare",
     "MAIL_FROM": "forum@nodebox.net"
   }
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
   //   CF_ACCOUNT_ID, CF_IMAGES_TOKEN, CF_IMAGES_HASH (the account hash in imagedelivery.net URLs)
   //   ANTHROPIC_API_KEY (spam filter on new posts; without it nothing is checked)
+  // Deploys run in Cloudflare Workers Builds on every push to main (web/DEPLOY.md).
 }

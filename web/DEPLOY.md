@@ -45,7 +45,10 @@ requests; it holds no Cloudflare credentials.
 3. Load the Tender data from the machine that has `data/` (it contains email
    addresses; it never goes to GitHub):
    `npx wrangler d1 execute nodebox-forum --remote --file ../data/import.sql`
-4. Upload the old attachments to R2 and Images (script still to write).
+4. Upload the old attachments, from the same machine. This reads the
+   production D1 and fills the R2 bucket and Cloudflare Images; it is safe to
+   run again after an interruption:
+   `npm run upload:attachments:remote`
 5. Make the first admin: `npm run admin -- grant <email> --remote`.
 6. Check: a sign-in email arrives, an upload works, a screenshot shows its
    resized variant, an old Tender URL redirects.

@@ -51,6 +51,7 @@ log at `/admin/log`.
 npm run import:tender                         # ../data/forum.sqlite → ../data/import.sql
 npx wrangler d1 execute nodebox-forum --local --file ../data/import.sql
 npm run upload:attachments                    # ../data/attachments → local R2
+                                              # (production: see DEPLOY.md)
 ```
 
 Run it against an empty, freshly migrated database. If the spam filter

@@ -18,6 +18,8 @@ export interface Bindings {
   CF_ACCOUNT_ID?: string;
   CF_IMAGES_TOKEN?: string;
   CF_IMAGES_HASH?: string;
+  /** For the spam filter on new posts (src/spamfilter.ts). Without it nothing is checked. */
+  ANTHROPIC_API_KEY?: string;
 }
 
 export interface Variables {

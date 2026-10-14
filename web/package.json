@@ -5,6 +5,7 @@
   "description": "The NodeBox forum: a Cloudflare Worker (Hono + D1 + R2 + Cloudflare Images).",
   "type": "module",
   "scripts": {
+    "env": "op inject -f -i .env.template -o .env && chmod 600 .env",
     "build:client": "node scripts/build-client.mjs",
     "dev": "npm run build:client && wrangler dev --var MAILER:log --var PUBLIC_URL:http://localhost:8787",
     "db:migrate:local": "wrangler d1 migrations apply nodebox-forum --local",
@@ -18,6 +19,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "import:tender": "node --disable-warning=ExperimentalWarning scripts/import-tender.ts",
+    "upload:attachments": "node --disable-warning=ExperimentalWarning scripts/upload-attachments.ts",
     "admin": "node --disable-warning=ExperimentalWarning scripts/admin.ts"
   },
   "dependencies": {

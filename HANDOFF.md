@@ -12,9 +12,9 @@ anywhere (it contains user emails). Commit code fixes to `main` and push.
 1. `git pull`. Check `node -v` is 22.18 or later (it runs .ts directly and
    uses `node:sqlite`). If not, stop and say so.
 2. `npm install`. If `.env` doesn't exist, `npm run env` (op inject from
-   `op://NodeBox/NodeBox Tender Forum/credential`). If `op` fails on the item
-   name with spaces, try the item's ID instead (`op item get "NodeBox Tender Forum" --vault NodeBox --format json | jq -r .id`)
-   and update `.env.tpl`.
+   `op://NodeBox/NodeBox Forum/Tender/READONLY_API_KEY`). If `op` fails on the item
+   name with spaces, try the item's ID instead (`op item get "NodeBox Forum" --vault NodeBox --format json | jq -r .id`)
+   and update `.env.template`.
 3. `npm run export -- ping`. On 401: auth header (client.ts sends both
    `Authorization: Bearer` and `X-Tender-Auth`; Tender may want HTTP basic
    with the key as username instead). On 404: `TENDER_SITE` is wrong (the

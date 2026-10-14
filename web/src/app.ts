@@ -37,7 +37,8 @@ import {
   userForVerifiedEmail,
   type SignInResult,
 } from "./auth.ts";
-import { UploadError, fileUrl, imageUrls, isImage, storeUpload } from "./files.ts";
+import { UploadError, fileUrl, imageUrls, isImage, settleAttachments, storeUpload } from "./files.ts";
+import { refusalReason, refusePost } from "./spamfilter.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
 import { isEmail, normalizeEmail, safeNext } from "./util.ts";
@@ -59,6 +60,7 @@ import {
   topicPage,
   topicUrl,
   type RenderedPost,
+  refusedPage,
 } from "./views/pages.ts";
 
 const TOPICS_PER_PAGE = 30;
@@ -87,7 +89,7 @@ async function sidebarCategories(db: D1Database): Promise<Category[]> {
   return categoryCache.list;
 }
 
-async function page(c: Context<AppEnv>, content: Html, opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 429; mainClass?: string } = {}) {
+async function page(c: Context<AppEnv>, content: Html, opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 422 | 429; mainClass?: string } = {}) {
   const url = new URL(c.req.url);
   const categories = await sidebarCategories(c.env.DB);
   return c.html(
@@ -249,7 +251,13 @@ app.post("/new", async (c) => {
   if (title.length < 3) return fail("The title needs a few more words.");
   if (body.length === 0) return fail("Write a message (or at least attach something and say what it is).");
   if (!(await rateLimit(c.env.DB, `post:${user.id}`, 20, 3600))) return fail("You're posting very fast. Please wait a while and try again.");
-  const { topicId } = await createTopic(c.env.DB, { categoryId: category.id, userId: user.id, title, body, attachmentIds: attachmentIds(form) });
+  const refusal = await refusalReason(c.env, user, { topicTitle: title, body, opensTopic: true });
+  const { topicId, postId } = await createTopic(c.env.DB, { categoryId: category.id, userId: user.id, title, body, attachmentIds: attachmentIds(form) });
+  await settleAttachments(c.env, postId);
+  if (refusal) {
+    await refusePost(c.env, postId, user.id, refusal);
+    return page(c, refusedPage(), { title: "Not posted", status: 422, mainClass: "narrow" });
+  }
   const topic = await getTopic(c.env.DB, topicId);
   return c.redirect(topicUrl(topic!));
 });
@@ -266,7 +274,13 @@ app.post("/t/:id/reply", async (c) => {
   if (!(await rateLimit(c.env.DB, `post:${user.id}`, 20, 3600))) {
     return page(c, messagePage("Slow down a little", "You're posting very fast. Please wait a while and try again."), { status: 429 });
   }
+  const refusal = await refusalReason(c.env, user, { topicTitle: topic.title, body, opensTopic: false });
   const postId = await createReply(c.env.DB, { topicId: topic.id, userId: user.id, body, attachmentIds: attachmentIds(form) });
+  await settleAttachments(c.env, postId);
+  if (refusal) {
+    await refusePost(c.env, postId, user.id, refusal);
+    return page(c, refusedPage(), { title: "Not posted", status: 422, mainClass: "narrow" });
+  }
   return c.redirect(await postLink(c, topic, postId));
 });
 

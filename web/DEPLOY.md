@@ -33,7 +33,7 @@ requests; it holds no Cloudflare credentials.
 | Hostname | After the first deploy: add `forum.nodebox.net` as a custom domain (`routes` in `wrangler.jsonc`). Until then the forum runs on its workers.dev URL |
 | Email | Onboard `nodebox.net` for Email Sending in the dashboard; sender is `MAIL_FROM` (`forum@nodebox.net`) |
 | Images | Uses the account's existing variants `medium` (1000 px wide, in posts) and `thumb` (600 × 600, galleries) |
-| Worker secrets | `npm run secrets` copies `CF_ACCOUNT_ID`, `CF_IMAGES_HASH`, `CF_IMAGES_TOKEN` from 1Password (`op://NodeBox/NodeBox Forum/Cloudflare/…`) |
+| Worker secrets | `npm run secrets` copies `CF_ACCOUNT_ID`, `CF_IMAGES_HASH`, `CF_IMAGES_TOKEN` (`op://NodeBox/NodeBox Forum/Cloudflare/…`) and `ANTHROPIC_API_KEY` (spam filter) from 1Password |
 | Git connection | The build settings above. Connect it last: the first build deploys |
 
 ## First deploy

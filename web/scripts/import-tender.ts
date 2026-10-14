@@ -10,8 +10,9 @@
 //
 // What comes over: public categories; open/assigned/resolved public discussions
 // (resolved becomes "solved"); comments that aren't internal notes or system
-// messages; the users who wrote them (deduplicated on email); attachment
-// metadata (files are uploaded separately); old URLs for redirects.
+// messages; the users who wrote at least one visible post (deduplicated on
+// email); attachment metadata (files are uploaded separately); old URLs for
+// redirects.
 // Items the spam filter flagged (the `spam_excluded` view, if present) are
 // imported with status 'spam': hidden, but admins can restore them.
 import { DatabaseSync } from "node:sqlite";
@@ -74,9 +75,13 @@ export function attachmentLocalPath(downloadPath: string): string {
     .join("/");
 }
 
-/** Stable attachment id, so re-running the import (and the uploader) agree. */
-export function attachmentId(downloadPath: string): string {
-  return createHash("sha256").update(downloadPath).digest("base64url").slice(0, 16);
+/**
+ * Stable attachment id, so re-running the import (and the uploader) agree.
+ * An attachment belongs to one post: a file that hung on two Tender comments
+ * gets two ids, and so two stored copies.
+ */
+export function attachmentId(discussionId: number, commentNumber: number, downloadPath: string): string {
+  return createHash("sha256").update(`${discussionId}/${commentNumber}${downloadPath}`).digest("base64url").slice(0, 16);
 }
 
 const iso = (s: string | null | undefined) => (s ? new Date(s).toISOString() : null);
@@ -167,10 +172,8 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
      FROM comments WHERE discussion_id = ? AND coalesce(internal, 0) = 0 AND coalesce(system_message, 0) = 0
      ORDER BY number`,
   );
-  // One file can hang on several comments (the exporter keys on comment + path); the forum keeps it on the first.
-  const importedAttachments = new Set<string>();
   const attachmentsStmt = src.prepare(
-    "SELECT download_path, comment_number, filename, content_type, size, width, height, created_at, local_path FROM attachments WHERE discussion_id = ? ORDER BY comment_number",
+    "SELECT download_path, comment_number, filename, content_type, size, width, height, created_at, local_path FROM attachments WHERE discussion_id = ?",
   );
 
   // Old URLs -> new topic paths, for rewriting links inside bodies.
@@ -192,11 +195,22 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   }
 
   const categoryCounts = new Map<number, number>();
+  const visibleAuthors = new Set<number>();
+  const built: {
+    d: any;
+    slug: string;
+    topicStatus: string;
+    postRows: Record<string, unknown>[];
+    files: any[];
+    postIdByNumber: Map<number, number>;
+    visible: number;
+    last: { at: string; user: number } | null;
+  }[] = [];
   let postId = 0;
   for (const { d, comments, slug } of kept) {
     const files = attachmentsStmt.all(d.id) as any[];
     const fileUrlByPath = new Map<string, string>();
-    for (const f of files) fileUrlByPath.set(f.download_path, `/files/${attachmentId(f.download_path)}/${encodeURIComponent(f.filename ?? "file")}`);
+    for (const f of files) fileUrlByPath.set(f.download_path, `/files/${attachmentId(d.id, f.comment_number, f.download_path)}/${encodeURIComponent(f.filename ?? "file")}`);
 
     const rewrite = (text: string) =>
       text.replace(/(https?:\/\/[^\s)"'<>]+|\/assets\/[^\s)"'<>]+|\/discussions\/[^\s)"'<>]+)/g, (url) => {
@@ -212,7 +226,6 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
 
     const topicSpam = spamDiscussions.get(d.id) ?? (spamComments.has(`${d.id}:${comments[0].number}`) ? spamComments.get(`${d.id}:${comments[0].number}`)! : null);
     const topicStatus = topicSpam ? "spam" : "visible";
-    const authorId = userFor(d.user_id ?? comments[0].user_id, d.author_name ?? comments[0].author_name, d.author_email ?? comments[0].author_email, d.created_at);
     const postRows: Record<string, unknown>[] = [];
     let visible = 0;
     let last: { at: string; user: number } | null = null;
@@ -238,8 +251,25 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
       if (status === "visible") {
         visible++;
         last = { at: created, user: userId };
-      } else stats.spamPosts++;
+        visibleAuthors.add(userId);
+      }
     }
+    built.push({ d, slug, topicStatus, postRows, files, postIdByNumber, visible, last });
+  }
+
+  // Only people with a visible post come over. What such a person leaves behind
+  // is hidden spam, and it stays in the export: those posts are dropped, and a
+  // topic with no post left is dropped with them.
+  for (const { d, slug, topicStatus, postRows: allPosts, files, postIdByNumber, visible, last } of built) {
+    const postRows = allPosts.filter((r) => visibleAuthors.has(r.user_id as number));
+    if (postRows.length === 0) {
+      stats.skippedDiscussions++;
+      continue;
+    }
+    const keptPostIds = new Set(postRows.map((r) => r.id));
+    // The topic's author is whoever wrote its first post.
+    const authorId = postRows[0]!.user_id as number;
+    stats.spamPosts += postRows.filter((r) => r.status !== "visible").length;
     const created = iso(d.created_at) ?? (postRows[0]!.created_at as string);
     out.push(
       insert("topics", {
@@ -260,17 +290,15 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     for (const row of postRows) out.push(insert("posts", row));
     for (const f of files) {
       const pid = postIdByNumber.get(f.comment_number);
-      if (pid === undefined) continue; // attachment on an internal note
-      const id = attachmentId(f.download_path);
-      if (importedAttachments.has(id)) continue;
-      importedAttachments.add(id);
+      if (pid === undefined || !keptPostIds.has(pid)) continue; // attachment on an internal note or a dropped post
+      const id = attachmentId(d.id, f.comment_number, f.download_path);
       const type = f.content_type || "application/octet-stream";
       out.push(
         insert("attachments", {
           id,
           user_id: postRows.find((r) => r.id === pid)!.user_id,
           post_id: pid,
-          r2_key: `tender/${attachmentLocalPath(f.download_path)}`,
+          r2_key: `posts/${pid}/${id}/${attachmentLocalPath(f.download_path).split("/").pop()}`,
           filename: f.filename ?? "file",
           content_type: type,
           size: f.size ?? 0,
@@ -295,10 +323,10 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   for (const [catId, n] of categoryCounts) out.push(`UPDATE categories SET topic_count = ${n} WHERE id = ${catId};`);
 
   // Users go first so foreign keys resolve.
-  const userStatements = [...users.values()].map((u) =>
-    insert("users", { id: u.id, email: u.email, name: u.name, created_at: u.created_at, tender_id: u.tender_id }),
-  );
-  stats.users = users.size;
+  const userStatements = [...users.values()]
+    .filter((u) => visibleAuthors.has(u.id))
+    .map((u) => insert("users", { id: u.id, email: u.email, name: u.name, created_at: u.created_at, tender_id: u.tender_id }));
+  stats.users = userStatements.length;
   return { statements: [...userStatements, ...out], stats };
 }
 

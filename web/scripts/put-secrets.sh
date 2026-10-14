@@ -7,3 +7,5 @@ cd "$(dirname "$0")/.."
 for name in CF_ACCOUNT_ID CF_IMAGES_HASH CF_IMAGES_TOKEN; do
   op read "op://NodeBox/NodeBox Forum/Cloudflare/$name" | npx wrangler secret put "$name"
 done
+# The spam filter for new posts; without it no post is checked.
+op read "op://NodeBox/NodeBox Forum/Anthropic/ANTHROPIC_API_KEY" | npx wrangler secret put ANTHROPIC_API_KEY

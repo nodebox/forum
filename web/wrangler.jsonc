@@ -16,7 +16,8 @@
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "nodebox-forum" }
   ],
-  // Hourly: send grouped reply digests (src/notifications.ts).
+  // Hourly: send grouped reply digests (src/notifications.ts), sweep abandoned uploads (src/files.ts)
+  // and delete old refused spam (src/spamfilter.ts).
   "triggers": { "crons": ["17 * * * *"] },
   "vars": {
     "SITE_NAME": "NodeBox Forum",
@@ -34,5 +35,6 @@
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
   //   CF_ACCOUNT_ID, CF_IMAGES_TOKEN, CF_IMAGES_HASH (the account hash in imagedelivery.net URLs)
+  //   ANTHROPIC_API_KEY (spam filter on new posts; without it nothing is checked)
   // Deploys run in Cloudflare Workers Builds on every push to main (web/DEPLOY.md).
 }

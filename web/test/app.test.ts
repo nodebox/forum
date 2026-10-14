@@ -7,6 +7,8 @@ import path from "node:path";
 import { getPlatformProxy } from "wrangler";
 import { app } from "../src/app.ts";
 import { sendDigests } from "../src/notifications.ts";
+import { sweepPending } from "../src/files.ts";
+import { purgeRefused } from "../src/spamfilter.ts";
 
 const persist = fs.mkdtempSync(path.join(os.tmpdir(), "forum-test-"));
 let proxy: Awaited<ReturnType<typeof getPlatformProxy>>;
@@ -15,6 +17,8 @@ let env: any;
 before(async () => {
   proxy = await getPlatformProxy({ persist: { path: persist } });
   env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost" };
+  // A developer's .env may hold a real key; the tests only ever talk to the stand-in below.
+  delete env.ANTHROPIC_API_KEY;
   const dir = path.join(import.meta.dirname, "../migrations");
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
     const schema = fs.readFileSync(path.join(dir, file), "utf8");
@@ -74,12 +78,29 @@ test("sign in, post, react, moderate", async () => {
   fd.append("file", new File([new Uint8Array([80, 75, 3, 4])], "project.zip", { type: "application/zip" }));
   const up = await (await req("/uploads", { method: "POST", cookie: alice, body: fd })).json() as any;
   assert.equal(up.isImage, false);
-  await req(`/t/${topicId}/reply`, { method: "POST", cookie: alice, body: form({ body: "Here's the project", attachments: up.id }) });
+  const key = async () => (await env.DB.prepare("SELECT r2_key FROM attachments WHERE id = ?").bind(up.id).first()).r2_key as string;
+  // Until the post exists the file waits in pending/; posting moves it into the post's folder.
+  const pendingKey = await key();
+  assert.equal(pendingKey, `pending/${up.id}/project.zip`);
+  res = await req(`/t/${topicId}/reply`, { method: "POST", cookie: alice, body: form({ body: "Here's the project", attachments: up.id }) });
+  const projectPost = Number(/#post-(\d+)/.exec(res.headers.get("location")!)![1]);
+  assert.equal(await key(), `posts/${projectPost}/${up.id}/project.zip`);
+  assert.equal(await env.FILES.head(pendingKey), null);
+  assert.ok(await env.FILES.head(await key()));
   html = await (await req(topicPath)).text();
   assert.match(html, /project\.zip/);
   const dl = await req(`/files/${up.id}/project.zip`);
   assert.equal(dl.status, 200);
   assert.match(dl.headers.get("content-disposition")!, /^attachment/);
+
+  // A file on the first post of a new topic moves the same way.
+  const fd2 = new FormData();
+  fd2.append("file", new File([new Uint8Array([1, 2, 3])], "sketch.ndbx"));
+  const up2 = await (await req("/uploads", { method: "POST", cookie: alice, body: fd2 })).json() as any;
+  res = await req("/new", { method: "POST", cookie: alice, body: form({ title: "A sketch", category: "questions", body: "See attached", attachments: up2.id }) });
+  assert.equal(res.status, 302);
+  const sketch = await env.DB.prepare("SELECT post_id, r2_key FROM attachments WHERE id = ?").bind(up2.id).first();
+  assert.equal(sketch.r2_key, `posts/${sketch.post_id}/${up2.id}/sketch.ndbx`);
 
   // Reactions toggle.
   const firstPost = Number(/id="post-(\d+)"/.exec(html)![1]);
@@ -198,4 +219,121 @@ test("watching, grouped digests, hearts, your topics", async () => {
   assert.deepEqual(r.reactions.map((x: any) => [x.emoji, x.count, x.mine]), [["❤️", 1, true]]);
   const page = await (await req(topics[1]!, { cookie: bob })).text();
   assert.match(page, /class="reaction heart has mine"/);
+});
+
+test("the sweep removes abandoned uploads and finishes interrupted moves", async () => {
+  const carol = await signIn("carol@example.com");
+  const upload = async (name: string) => {
+    const fd = new FormData();
+    fd.append("file", new File([new Uint8Array([1, 2, 3])], name));
+    return (await (await req("/uploads", { method: "POST", cookie: carol, body: fd })).json()) as any;
+  };
+  const row = (id: string) => env.DB.prepare("SELECT post_id, r2_key FROM attachments WHERE id = ?").bind(id).first();
+  const abandoned = await upload("abandoned.zip");
+  const interrupted = await upload("interrupted.zip");
+  // A post claimed this file, but the move into its folder never happened.
+  const post = await env.DB.prepare("SELECT id FROM posts LIMIT 1").first();
+  await env.DB.prepare("UPDATE attachments SET post_id = ? WHERE id = ?").bind(post.id, interrupted.id).run();
+
+  assert.deepEqual(await sweepPending(env), { removed: 0, moved: 0 }, "uploads from the last day are left alone");
+  assert.ok(await row(abandoned.id));
+
+  const tomorrow = Date.now() + 25 * 3600 * 1000;
+  assert.deepEqual(await sweepPending(env, tomorrow), { removed: 1, moved: 1 });
+  assert.equal(await row(abandoned.id), null);
+  assert.equal(await env.FILES.head(`pending/${abandoned.id}/abandoned.zip`), null);
+  assert.equal((await row(interrupted.id)).r2_key, `posts/${post.id}/${interrupted.id}/interrupted.zip`);
+  assert.equal((await req(`/files/${interrupted.id}/interrupted.zip`)).status, 200);
+  assert.equal((await env.FILES.list({ prefix: "pending/" })).objects.length, 0);
+});
+
+// A stand-in for the Anthropic API: the verdict follows a keyword in the post.
+function fakeSpamApi() {
+  const calls: string[] = [];
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: any, init?: any) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (!url.startsWith("https://api.anthropic.com/")) return real(input, init);
+    const text = JSON.parse(init.body).messages[0].content as string;
+    calls.push(text);
+    if (text.includes("outage")) return new Response("overloaded", { status: 529 });
+    const verdict = text.includes("casino")
+      ? { verdict: "spam", confidence: 0.97, reason: "casino advert" }
+      : text.includes("borderline")
+        ? { verdict: "spam", confidence: 0.8, reason: "maybe promotional" }
+        : { verdict: "ham", confidence: 0.97, reason: "genuine" };
+    return Response.json({ stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(verdict) }] });
+  }) as typeof fetch;
+  return { calls, restore: () => { globalThis.fetch = real; } };
+}
+
+test("the spam filter refuses spam from new accounts", async () => {
+  const api = fakeSpamApi();
+  env.ANTHROPIC_API_KEY = "test-key";
+  try {
+    const eve = await signIn("eve@example.com");
+    const topic = await env.DB.prepare("SELECT id, slug, post_count FROM topics WHERE status = 'visible' LIMIT 1").first();
+    const reply = (cookie: string, body: string) => req(`/t/${topic.id}/reply`, { method: "POST", cookie, body: form({ body }) });
+
+    const res = await reply(eve, "Best casino bonus here");
+    assert.equal(res.status, 422);
+    assert.match(await res.text(), /was not posted/);
+    const stored = await env.DB.prepare("SELECT status, moderated_by, moderation_reason FROM posts WHERE body = 'Best casino bonus here'").first();
+    assert.deepEqual({ ...stored }, { status: "spam", moderated_by: null, moderation_reason: "Spam filter: casino advert" });
+    assert.doesNotMatch(await (await req(`/t/${topic.id}/${topic.slug}`)).text(), /casino bonus/);
+    assert.equal((await env.DB.prepare("SELECT post_count FROM topics WHERE id = ?").bind(topic.id).first()).post_count, topic.post_count);
+
+    // A refused new topic is stored hidden as well, and the category count stays.
+    const before = (await env.DB.prepare("SELECT topic_count FROM categories WHERE id = 1").first()).topic_count;
+    const newTopic = await req("/new", { method: "POST", cookie: eve, body: form({ title: "Win big", category: "questions", body: "Online casino, click here" }) });
+    assert.equal(newTopic.status, 422);
+    assert.equal((await env.DB.prepare("SELECT status FROM topics WHERE title = 'Win big'").first()).status, "spam");
+    assert.equal((await env.DB.prepare("SELECT topic_count FROM categories WHERE id = 1").first()).topic_count, before);
+
+    // Posting keeps working when the filter is unsure, fails, or is switched off.
+    const frank = await signIn("frank@example.com");
+    assert.equal((await reply(frank, "A borderline mention of my shop")).status, 302, "spam below 0.9 is published");
+    assert.equal((await reply(frank, "Posted during an outage")).status, 302, "an API error publishes");
+    delete env.ANTHROPIC_API_KEY;
+    const callsBefore = api.calls.length;
+    assert.equal((await reply(frank, "No key, casino or not")).status, 302);
+    assert.equal(api.calls.length, callsBefore, "without a key nothing is sent");
+    env.ANTHROPIC_API_KEY = "test-key";
+
+    // Frank now has three visible posts, so his posts are no longer checked.
+    assert.equal((await reply(frank, "I do like a casino")).status, 302);
+    assert.equal(api.calls.length, callsBefore, "an established account is not checked");
+
+    // Three refused posts ban the account. Eve has two; the third does it.
+    assert.equal((await env.DB.prepare("SELECT banned_at FROM users WHERE email = 'eve@example.com'").first()).banned_at, null);
+    assert.equal((await reply(eve, "casino casino casino")).status, 422);
+    assert.ok((await env.DB.prepare("SELECT banned_at FROM users WHERE email = 'eve@example.com'").first()).banned_at);
+    assert.equal((await reply(eve, "one more casino")).status, 302, "her session is gone, so she is sent to sign in");
+    assert.equal(await env.DB.prepare("SELECT id FROM posts WHERE body = 'one more casino'").first(), null);
+
+    // Refused posts delete themselves after 30 days, with their files. Restored and imported ones stay.
+    const gina = await signIn("gina@example.com");
+    const fd = new FormData();
+    fd.append("file", new File([new Uint8Array([1, 2, 3])], "flyer.zip"));
+    const up = (await (await req("/uploads", { method: "POST", cookie: gina, body: fd })).json()) as any;
+    await req(`/t/${topic.id}/reply`, { method: "POST", cookie: gina, body: form({ body: "casino flyer attached", attachments: up.id }) });
+    const flyerKey = (await env.DB.prepare("SELECT r2_key FROM attachments WHERE id = ?").bind(up.id).first()).r2_key;
+    assert.ok(await env.FILES.head(flyerKey));
+    await env.DB.prepare("UPDATE posts SET status = 'visible', moderated_by = (SELECT id FROM users WHERE is_admin = 1 LIMIT 1) WHERE body = 'casino casino casino'").run();
+    await env.DB.prepare("UPDATE posts SET tender_number = 9 WHERE body = 'Best casino bonus here'").run();
+    const count = async (where: string) => (await env.DB.prepare(`SELECT count(*) AS n FROM ${where}`).first()).n;
+
+    const topicsBefore = await count("topics");
+    assert.deepEqual(await purgeRefused(env), { posts: 0, topics: 0 }, "nothing is old enough yet");
+    assert.deepEqual(await purgeRefused(env, Date.now() + 31 * 24 * 3600 * 1000), { posts: 2, topics: 1 });
+    assert.equal(await count("posts WHERE body IN ('Online casino, click here', 'casino flyer attached')"), 0);
+    assert.equal(await count("topics WHERE title = 'Win big'"), 0);
+    assert.equal(await count("topics"), topicsBefore - 1, "only the topic left without a post is deleted");
+    assert.equal(await count("attachments WHERE id = '" + up.id + "'"), 0);
+    assert.equal(await env.FILES.head(flyerKey), null);
+    assert.equal(await count("posts WHERE body IN ('casino casino casino', 'Best casino bonus here')"), 2);
+  } finally {
+    delete env.ANTHROPIC_API_KEY;
+    api.restore();
+  }
 });

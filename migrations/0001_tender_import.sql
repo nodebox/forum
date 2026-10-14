@@ -80,7 +80,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id);
 CREATE TABLE IF NOT EXISTS attachments (
   discussion_id   INTEGER NOT NULL,
   comment_number  INTEGER NOT NULL,
-  download_path   TEXT NOT NULL,      -- /assets/{hash}/{filename}; doubles as the R2 key. One file can hang on several comments.
+  download_path   TEXT NOT NULL,      -- /assets/{hash}/{filename}. One file can hang on several comments.
   download_url    TEXT NOT NULL,      -- where to fetch it; Tender signs this for S3 and it expires after about a day
   filename        TEXT,
   content_type    TEXT,

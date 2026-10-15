@@ -56,6 +56,8 @@ export async function uploadFiles(
 /**
  * Put the rows that have an `image_id` into Cloudflare Images under that id.
  * An image already there is left alone, so a second run uploads nothing.
+ * `rejected` are images Cloudflare Images refuses (too large, too many
+ * animation frames, not a format it reads); `failed` may work on a second run.
  */
 export async function uploadImages(
   rows: UploadRow[],
@@ -64,8 +66,8 @@ export async function uploadImages(
   account: string,
   token: string,
   progress: (done: number) => void = () => {},
-): Promise<{ uploaded: number; present: number; missing: string[]; failed: string[] }> {
-  const result = { uploaded: 0, present: 0, missing: [] as string[], failed: [] as string[] };
+): Promise<{ uploaded: number; present: number; missing: string[]; rejected: string[]; failed: string[] }> {
+  const result = { uploaded: 0, present: 0, missing: [] as string[], rejected: [] as string[], failed: [] as string[] };
   const api = `https://api.cloudflare.com/client/v4/accounts/${account}/images/v1`;
   const headers = { Authorization: `Bearer ${token}` };
   let done = 0;
@@ -83,7 +85,7 @@ export async function uploadImages(
       const res = await fetch(api, { method: "POST", headers, body: form });
       if (res.ok) result.uploaded++;
       else {
-        result.failed.push(row.id);
+        (res.status === 413 || res.status === 415 ? result.rejected : result.failed).push(row.id);
         console.error(`Cloudflare Images upload failed for ${row.image_id}: ${res.status} ${await res.text()}`);
       }
     }
@@ -139,7 +141,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const i = await uploadImages(images, localById, path.join(dataDir, "attachments"), CF_ACCOUNT_ID!, CF_IMAGES_TOKEN!, (done) => {
         if (done % 100 === 0) console.log(`  ${done}/${images.length}`);
       });
-      console.log(`Images: uploaded ${i.uploaded}, already there ${i.present}, no file on disk ${i.missing.length}, failed ${i.failed.length}.`);
+      console.log(`Images: uploaded ${i.uploaded}, already there ${i.present}, no file on disk ${i.missing.length}, refused ${i.rejected.length}, failed ${i.failed.length}.`);
+      // Like a refused upload in the forum (storeUpload): no image_id, so the post shows the original from R2.
+      for (const id of i.rejected) await env.DB.prepare("UPDATE attachments SET image_id = NULL WHERE id = ?").bind(id).run();
+      if (i.rejected.length) console.log(`  refused, shown from R2 instead: ${i.rejected.join(" ")}`);
       if (i.failed.length) process.exitCode = 1;
     }
   } finally {

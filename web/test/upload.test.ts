@@ -61,7 +61,26 @@ test("puts images into Cloudflare Images under their id, once", async (t) => {
   ];
   const local = new Map([["b1", "assets/def/shot.png"], ["b2", "assets/def/scene.ndbx"]]);
 
-  assert.deepEqual(await uploadImages(rows, local, dir, "acct", "tok"), { uploaded: 1, present: 0, missing: ["b3"], failed: [] });
+  assert.deepEqual(await uploadImages(rows, local, dir, "acct", "tok"), { uploaded: 1, present: 0, missing: ["b3"], rejected: [], failed: [] });
   assert.equal(stored.get("nodebox-forum-b1"), "PNG!!");
-  assert.deepEqual(await uploadImages(rows, local, dir, "acct", "tok"), { uploaded: 0, present: 1, missing: ["b3"], failed: [] }, "a second run uploads nothing");
+  assert.deepEqual(await uploadImages(rows, local, dir, "acct", "tok"), { uploaded: 0, present: 1, missing: ["b3"], rejected: [], failed: [] }, "a second run uploads nothing");
+});
+
+test("tells an image Cloudflare Images refuses apart from a failed upload", async (t) => {
+  const dir = path.join(tmp, "refused");
+  fs.mkdirSync(path.join(dir, "assets/ghi"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "assets/ghi/long.gif"), "GIF!!");
+  t.mock.method(globalThis, "fetch", async (_url: string, init?: RequestInit) => {
+    if (init?.method !== "POST") return new Response("{}", { status: 404 });
+    const id = (init.body as FormData).get("id");
+    return new Response("{}", { status: id === "nodebox-forum-c1" ? 413 : 502 });
+  });
+  t.mock.method(console, "error", () => {});
+  const rows = [
+    { id: "c1", r2_key: "posts/8/c1/long.gif", filename: "long.gif", content_type: "image/gif", image_id: "nodebox-forum-c1" },
+    { id: "c2", r2_key: "posts/8/c2/long.gif", filename: "long.gif", content_type: "image/gif", image_id: "nodebox-forum-c2" },
+  ];
+  const local = new Map([["c1", "assets/ghi/long.gif"], ["c2", "assets/ghi/long.gif"]]);
+
+  assert.deepEqual(await uploadImages(rows, local, dir, "acct", "tok"), { uploaded: 0, present: 0, missing: [], rejected: ["c1"], failed: ["c2"] });
 });

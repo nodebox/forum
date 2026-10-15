@@ -65,7 +65,7 @@ Mapping:
 | Tender                         | Forum                                   |
 | ------------------------------ | --------------------------------------- |
 | categories                     | categories (slug from `permalink`)      |
-| discussions (open/assigned/resolved, public) | topics; `resolved` becomes a "solved" flag |
+| discussions (open/assigned/resolved, public) | topics (Tender's `resolved` is kept in `topics.solved` but not shown) |
 | comments (not `internal`, not `system_message`) | posts; comment 1 is the opening post |
 | users                          | users, deduplicated on lowercased email |
 | authors without a user row     | placeholder users with no email (cannot sign in) |
@@ -173,7 +173,7 @@ empty grey square, stay readable and searchable, take no new topics, and don't
 count as unanswered. Replies in them stay open. `categories.archived`,
 `migrations/0004_archived_categories.sql` marks them by name.
 
-Topic authors can mark their own topic solved.
+There is no "solved" state: Frederik dropped it (2026-10-15).
 
 ## 4b. Moderation
 

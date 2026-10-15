@@ -324,17 +324,6 @@ async function postLink(c: Context<AppEnv>, topic: { id: number; slug: string },
   return `${topicUrl(topic)}${p > 1 ? `?page=${p}` : ""}#post-${postId}`;
 }
 
-app.post("/t/:id/solved", async (c) => {
-  const { user, redirect } = requireUser(c);
-  if (redirect) return redirect;
-  const topic = await getTopic(c.env.DB, Number(c.req.param("id")));
-  if (!topic) return c.notFound();
-  if (topic.user_id !== user.id && !user.is_admin) return page(c, messagePage("Not allowed", "Only the person who started a topic can mark it solved."), { status: 403 });
-  const form = await c.req.parseBody();
-  await c.env.DB.prepare("UPDATE topics SET solved = ? WHERE id = ?").bind(form["solved"] === "1" ? 1 : 0, topic.id).run();
-  return c.redirect(topicUrl(topic));
-});
-
 app.post("/t/:id/watch", async (c) => {
   const { user, redirect } = requireUser(c);
   if (redirect) return redirect;

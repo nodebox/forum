@@ -27,7 +27,6 @@ interface ListRow {
   last_post_at: string;
   pinned: number;
   locked: number;
-  solved: number;
   category_id: number;
   category_name: string;
   category_slug: string;
@@ -503,7 +502,6 @@ export function guidelinesPage(): Html {
       <li><strong>Share the project.</strong> When something doesn't work, attach the <code>.ndbx</code> file or a ZIP of the project folder with its data files. It is the fastest way to an answer.</li>
       <li><strong>Add a screenshot.</strong> Paste it straight into the message box.</li>
       <li><strong>One question per topic</strong>, with a title that says what it is about.</li>
-      <li><strong>Mark it solved</strong> when you have your answer, so the next person finds it.</li>
       <li><strong>Be kind.</strong> Everyone was new once.</li>
     </ul>
     <p>The rules everyone agrees to are in the <a href="/aup">acceptable use policy</a>.</p>

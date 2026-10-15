@@ -136,8 +136,16 @@ on hover. A fixed set keeps the row tidy and saves an emoji picker.
 
 Type: Atkinson Hyperlegible Next for text, Atkinson Hyperlegible Mono for code,
 self-hosted (no Google Fonts requests, which also avoids the GDPR question of
-sending visitors' IPs to Google). 17 px base, 1.6 line height, 68-character
-measure for post text.
+sending visitors' IPs to Google).
+
+Grid and type (**Decided**, 2026-10-15, design proposal A): one 12-column grid
+(24 px gutters, 1200 px), sidebar on columns 1-3, content on 4-12 as a 9-column
+subgrid; post text on content columns 2-7 (588 px, about 65 characters at
+18/28 px). 4 px baseline. Five sizes: 15/24 meta, 16/24 interface, 18/28
+reading, 22/28 list titles, 40/44 page titles; nothing smaller, no uppercase
+labels. Post actions are labelled (Like, React, Quote, Copy link). The topic
+list shows a line of the opening post and "No replies yet". Mockups and the
+proposals that led here: `docs/design/`.
 
 Colour (**Decided**): NodeBox navy `#041a32` for the header, text and primary
 buttons, a lighter navy-hued blue (`#1f5c99`) for links, navy-tinted neutrals,
@@ -150,12 +158,20 @@ Design (**Decided**, after the first version was too soft): editorial and
 square. Large, tight headlines in the variable Atkinson Hyperlegible Next
 (weight 800), hairline rules instead of rounded cards, 2 px corners at most.
 
-"This is a new forum" is said three times: a dismissible orange banner on every
-page for the first weeks, a short note on the sign-in page ("Had an account on
+"This is a new forum" is said three times: a dismissible welcome note at the top
+of the content for signed-out visitors in the first weeks, a short note on the sign-in page ("Had an account on
 the old forum? Sign in with the same email and your posts are waiting"), and
 an "Imported from the old forum" label on imported topics.
 
-Search: SQLite FTS5 inside D1 over topic titles and post bodies.
+Search: SQLite FTS5 inside D1 over topic titles and post bodies
+(`migrations/0003_search.sql`, kept in sync by triggers), in the header on
+every page. "Unanswered" lists topics with no replies outside the archive.
+
+Archived categories (2026-10-15): categories for products no longer developed
+(NodeBox 1, NodeBox OpenGL) are listed under "Archive" in the sidebar with an
+empty grey square, stay readable and searchable, take no new topics, and don't
+count as unanswered. Replies in them stay open. `categories.archived`,
+`migrations/0004_archived_categories.sql` marks them by name.
 
 Topic authors can mark their own topic solved.
 

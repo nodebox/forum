@@ -231,3 +231,40 @@ navToggle?.addEventListener("click", () => {
   const open = document.body.classList.toggle("nav-open");
   navToggle.setAttribute("aria-expanded", String(open));
 });
+
+// --- Copy link and quote ------------------------------------------------------
+
+document.addEventListener("click", async (e) => {
+  const link = (e.target as Element).closest<HTMLAnchorElement>("[data-copy-link]");
+  if (!link) return;
+  e.preventDefault();
+  history.replaceState(null, "", link.hash);
+  const label = $("span", link);
+  try {
+    await navigator.clipboard.writeText(link.href);
+    if (label) {
+      label.textContent = "Copied";
+      setTimeout(() => (label.textContent = "Copy link"), 1500);
+    }
+  } catch {
+    location.hash = link.hash;
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const btn = (e.target as Element).closest<HTMLButtonElement>("[data-quote]");
+  if (!btn) return;
+  const post = btn.closest(".post-main");
+  const body = post && $<HTMLElement>("[data-post-body]", post);
+  const textarea = $<HTMLTextAreaElement>("#reply textarea");
+  if (!body || !textarea) return;
+  // Quote the selected part of this post, or else its first paragraph.
+  const sel = getSelection();
+  const picked = sel && !sel.isCollapsed && body.contains(sel.anchorNode) ? sel.toString() : ($("p", body)?.innerText ?? body.innerText);
+  const quote = picked.trim().split("\n").map((l) => `> ${l}`).join("\n");
+  const lead = textarea.value && !textarea.value.endsWith("\n\n") ? "\n\n" : "";
+  textarea.value += `${lead}**${body.dataset.author}** wrote:\n${quote}\n\n`;
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  textarea.scrollIntoView({ block: "center" });
+});

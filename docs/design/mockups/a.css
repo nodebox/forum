@@ -1,0 +1,46 @@
+/* Proposal A: "Calm grid". Today's look (navy header, copper marks), with the grid,
+ * the type scale and the usability fixes from base.css. */
+@import "base.css";
+
+:root {
+  --navy: #041a32;
+  --paper: #fbfcfd;
+  --ink: #041a32;
+  --ink-2: #33465e;
+  --ink-3: #56657a;          /* darker than today's #5c6b80: passes 4.5:1 on the wash too */
+  --rule: #d6dde6;
+  --wash: #eef2f6;
+  --link: #1f5c99;
+  --focus: #b8703d;
+  --accent: #b8703d;         /* copper, marks only */
+  --button: #041a32;
+  --button-hover: #1f5c99;
+  --on-button: #fff;
+  --open: #1f5c99;
+  --heart: #b23b3b;
+  --code-bg: #041a32;
+  --code-ink: #e3ebf5;
+}
+
+.site-header { background: var(--navy); color: #fff; }
+.brand-sub { color: #9fb3c9; }
+.search input { border: 0; background: rgb(255 255 255 / 10%); color: #fff; }
+.search input::placeholder { color: #9fb3c9; }
+.search input:focus { outline: 3px solid var(--focus); background: rgb(255 255 255 / 16%); }
+.search .icon { color: #9fb3c9; }
+.button-light { background: #fff; color: var(--navy); }
+.button-light:hover { background: #d9e6f4; }
+
+.welcome { background: var(--wash); box-shadow: inset 3px 0 0 var(--accent); color: var(--ink-2); }
+.welcome strong { color: var(--ink); }
+
+.page-head h1 { font-size: 40px; line-height: 44px; font-weight: 800; letter-spacing: -0.025em; }
+
+
+.site-footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; color: var(--ink-3); font-size: 15px; }
+.site-footer a { color: var(--ink-2); }
+
+@media (max-width: 720px) {
+  .site-header { padding-top: 4px; }
+}
+

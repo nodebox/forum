@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Latest · NodeBox Forum (proposal A)</title>
+  <link rel="stylesheet" href="a.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-row">
+      <div class="header-brand">
+        <button type="button" class="icon-button nav-toggle" aria-label="Menu"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 5h16" /> <path d="M4 12h16" /> <path d="M4 19h16" /> </svg> </button>
+        <a class="brand" href="#"><svg class="logo-mark" viewBox="0 0 300 300" aria-hidden="true"><path fill="currentColor" d="M72.5,147.1L41.2,133V57.3l68.7-30.2l68.3,30.1v75.7L146.7,147c-5.1,2.3-8.3,7.7-7.3,13.2c1.2,6.1,6.3,9.9,11.8,9.9 c1.6,0,3.3-0.3,4.9-1.1l38.9-17.5c4.3-1.9,7-6.2,7-10.9V49.3c0-4.7-2.8-9-7.1-10.9L114.6,3c-3.1-1.3-6.6-1.4-9.6,0L24.3,38.4 c-4.3,1.9-7.1,6.2-7.1,10.9v91.3c0,4.7,2.8,9,7,10.9L63.1,169c6.7,3,14.7-0.6,16.5-8.1C81.2,155.4,77.8,149.5,72.5,147.1z M275.7,147.5L236.8,130c-6.7-3-14.7,0.6-16.5,8.1c-1.4,5.7,1.9,11.5,7.2,13.9l31.4,14.1v75.8L190.5,273l-68.7-30.1V89.1 c0-4.7-2.7-8.9-6.9-10.8L77.3,60.9c-4.7-2.2-10.5-1.4-14,2.4c-5.8,6.4-3.4,15.8,3.7,19.1l31,14.3v154c0,4.7,2.8,9,7.1,10.9 l80.7,35.4c1.5,0.7,3.2,1,4.8,1c1.7,0,3.4-0.4,4.9-1.1l80.3-36.5c4.3-1.9,7-6.2,7-10.9v-91.3C282.7,153.6,279.9,149.4,275.7,147.5z"/></svg><span class="brand-word">NodeBox</span><span class="brand-sub">Forum</span></a>
+      </div>
+      <form class="search" role="search" action="#">
+        <label class="visually-hidden" for="q">Search the forum</label>
+        <svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /> </svg> 
+        <input id="q" type="search" placeholder="Search questions and answers">
+      </form>
+      <nav class="header-nav" aria-label="Account">
+        <a class="button button-light" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="m10 17 5-5-5-5" /> <path d="M15 12H3" /> <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /> </svg> <span>Sign in</span></a>
+      </nav>
+    </div>
+  </header>
+  <div class="wrap shell">
+    <nav class="sidebar" aria-label="Forum">
+      <ul class="side-list">
+        <li><a class="side-link active" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /> <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1" /> </svg> <span>Latest</span></a></li>
+        <li><a class="side-link" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /> </svg> <span>Unanswered</span><span class="side-count">1</span></a></li>
+      </ul>
+      <h2 class="side-head">Categories</h2>
+      <ul class="side-list">
+        <li><a class="side-link" href="#"><span class="cat-sq" style="--cat:#b8703d" aria-hidden="true"></span><span>Questions</span></a></li><li><a class="side-link" href="#"><span class="cat-sq" style="--cat:#3f7d5a" aria-hidden="true"></span><span>Show and tell</span></a></li><li><a class="side-link" href="#"><span class="cat-sq" style="--cat:#7a5c99" aria-hidden="true"></span><span>Bug reports</span></a></li><li><a class="side-link" href="#"><span class="cat-sq" style="--cat:#00a3d4" aria-hidden="true"></span><span>Custom nodes</span></a></li>
+      </ul>
+      <h2 class="side-head">Help</h2>
+      <ul class="side-list">
+        <li><a class="side-link" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /> </svg> <span>How to ask a good question</span></a></li>
+        <li><a class="side-link" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5v16" /> <path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z" /> </svg> <span>Documentation</span></a></li>
+        <li><a class="side-link" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3v18" /> <path d="m19 8 3 8a5 5 0 0 1-6 0zV7" /> <path d="M3 7h1a17 17 0 0 0 8-2 17 17 0 0 0 8 2h1" /> <path d="m5 8 3 8a5 5 0 0 1-6 0zV7" /> <path d="M7 21h10" /> </svg> <span>Acceptable use</span></a></li>
+      </ul>
+    </nav>
+    <main id="main" class="main">
+      <aside class="welcome" aria-label="About this forum">
+        <p><strong>Welcome to the new NodeBox forum.</strong> Had an account on the old one? <a href="#">Sign in with the same email</a> and your posts are waiting for you.</p>
+        <button type="button" class="icon-button" aria-label="Dismiss"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /> </svg> </button>
+      </aside>
+      <header class="page-head">
+    <div class="page-head-text">
+      <h1>Latest</h1>
+      <p class="lede">Questions, projects and bugs from the NodeBox community. Search first: most questions have been answered before.</p>
+    </div>
+    <a class="button button-primary page-head-action" href="#"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /> </svg> Ask a question</a>
+  </header>
+  <nav class="tabs" aria-label="Filter topics">
+    <a class="tab active" href="#" aria-current="page">All</a>
+    <a class="tab" href="#">Unanswered <span class="tab-count">1</span></a>
+  </nav>
+  <ol class="topics">
+    <li class="topic-item">
+      <div class="topic-item-main">
+        <h2 class="topic-item-title"><a href="#">Generative posters for a jazz festival</a></h2>
+        <p class="topic-item-excerpt">Made a set of posters for a small jazz festival. Every poster is the same network with a different seed, and the colours come from the line-up spreadsheet.</p>
+        <p class="topic-item-meta"><a class="cat" href="#"><span class="cat-sq" style="--cat:#3f7d5a" aria-hidden="true"></span>Show and tell</a><span>Kenji Watanabe</span></p>
+      </div>
+      <div class="topic-item-stats">
+        <p class="stat-replies"><strong>1</strong> reply</p>
+        <p class="stat-last">3 days ago<span> by Lucas</span></p>
+      </div>
+    </li><li class="topic-item">
+      <div class="topic-item-main">
+        <h2 class="topic-item-title"><a href="#">How do I make a grid of circles follow a CSV column?</a></h2>
+        <p class="topic-item-excerpt">I have a CSV with a size column and I want each circle in a 10×10 grid to take its radius from the matching row.</p>
+        <p class="topic-item-meta"><a class="cat" href="#"><span class="cat-sq" style="--cat:#b8703d" aria-hidden="true"></span>Questions</a><span>Ana Moreira</span></p>
+      </div>
+      <div class="topic-item-stats">
+        <p class="stat-replies"><strong>2</strong> replies</p>
+        <p class="stat-last">3 days ago<span> by Ana</span></p>
+      </div>
+    </li><li class="topic-item">
+      <div class="topic-item-main">
+        <h2 class="topic-item-title"><a href="#">Welcome to the new forum: read this first</a></h2>
+        <p class="topic-item-excerpt">This forum replaces the old one. Your old account and posts came along: sign in with the same email address and they're yours.</p>
+        <p class="topic-item-meta"><span class="label label-pinned"><svg class="icon " aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /> </svg> Pinned</span><a class="cat" href="#"><span class="cat-sq" style="--cat:#b8703d" aria-hidden="true"></span>Questions</a><span>Lucas Nijs</span></p>
+      </div>
+      <div class="topic-item-stats">
+        <p class="stat-replies none">No replies yet</p>
+        <p class="stat-last">14 days ago<span> by Lucas</span></p>
+      </div>
+    </li><li class="topic-item">
+      <div class="topic-item-main">
+        <h2 class="topic-item-title"><a href="#">Import SVG crashes on files with gradients</a></h2>
+        <p class="topic-item-excerpt">When I import an SVG that has a linear gradient, NodeBox 3.0.40 crashes with a NullPointerException.</p>
+        <p class="topic-item-meta"><a class="cat" href="#"><span class="cat-sq" style="--cat:#7a5c99" aria-hidden="true"></span>Bug reports</a><span>Lucas Nijs</span><span class="label label-old">From the old forum</span></p>
+      </div>
+      <div class="topic-item-stats">
+        <p class="stat-replies"><strong>1</strong> reply</p>
+        <p class="stat-last">3 May 2014<span> by Frederik</span></p>
+      </div>
+    </li>
+  </ol>
+    </main>
+  </div>
+  <footer class="site-footer">
+    <div class="wrap"><p>The NodeBox forum. Built by the <a href="#">Experimental Media Research Group</a>.</p></div>
+  </footer>
+</body>
+</html>

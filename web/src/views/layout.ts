@@ -10,12 +10,18 @@ export interface LayoutProps {
   description?: string;
   user: User | null;
   notice?: string | null;
+  /** A standing message on every page, such as read-only mode. */
+  alert?: string | null;
   showBanner?: boolean;
   /** Path of the current page, used for "sign in" return links and the active sidebar item. */
   path: string;
   siteName: string;
   /** Categories for the sidebar. */
   categories: Category[];
+  /** Open questions, counted in the sidebar. */
+  unanswered: number;
+  /** The search box's current query, on the search page. */
+  query?: string;
   /** Extra class on <main>, e.g. "narrow". */
   mainClass?: string;
 }
@@ -27,8 +33,15 @@ const logo = raw(`<svg class="logo-mark" viewBox="0 0 300 300" aria-hidden="true
 const CATEGORY_COLOURS = ["#0072bc", "#b8703d", "#3f7d5a", "#7a5c99", "#00a3d4", "#9a4f5f", "#5c6b80"];
 export const categoryColour = (id: number) => CATEGORY_COLOURS[id % CATEGORY_COLOURS.length]!;
 
-export function categoryBadge(c: { id: number; slug: string; name: string }): Html {
-  return html`<a class="cat" href="/c/${c.slug}"><span class="cat-sq" style="--cat:${categoryColour(c.id)}" aria-hidden="true"></span>${c.name}</a>`;
+/** The coloured square of an active category; archived categories get an empty grey one. */
+export function categoryMark(c: { id: number; archived?: number }): Html {
+  return c.archived
+    ? html`<span class="cat-sq cat-sq-archived" aria-hidden="true"></span>`
+    : html`<span class="cat-sq" style="--cat:${categoryColour(c.id)}" aria-hidden="true"></span>`;
+}
+
+export function categoryBadge(c: { id: number; slug: string; name: string; archived?: number }): Html {
+  return html`<a class="cat" href="/c/${c.slug}">${categoryMark(c)}${c.name}</a>`;
 }
 
 export function avatar(user: { id: number; name: string }, size: "sm" | "md" = "md"): Html {
@@ -37,28 +50,32 @@ export function avatar(user: { id: number; name: string }, size: "sm" | "md" = "
 
 function sidebar(props: LayoutProps): Html {
   const here = props.path.split("?")[0];
-  const item = (href: string, label: string, ico: Html, external = false) =>
-    html`<li><a href="${href}" class="side-link${here === href ? " active" : ""}" ${here === href ? raw('aria-current="page"') : ""} ${external ? raw('rel="noopener"') : ""}>${ico}<span>${label}</span></a></li>`;
+  const item = (href: string, label: string, ico: Html, opts: { external?: boolean; count?: number } = {}) =>
+    html`<li><a href="${href}" class="side-link${here === href ? " active" : ""}" ${here === href ? raw('aria-current="page"') : ""} ${opts.external ? raw('rel="noopener"') : ""}>${ico}<span class="side-label">${label}</span>${opts.count ? html`<span class="side-count">${opts.count}</span>` : ""}</a></li>`;
+  const categoryLink = (c: Category) =>
+    html`<li><a href="/c/${c.slug}" class="side-link${here === `/c/${c.slug}` ? " active" : ""}" ${here === `/c/${c.slug}` ? raw('aria-current="page"') : ""}>
+      ${categoryMark(c)}<span class="side-label">${c.name}</span>
+    </a></li>`;
+  const archived = props.categories.filter((c) => c.archived);
   return html`<nav class="sidebar" id="sidebar" aria-label="Forum">
     <ul class="side-list">
       ${item("/", "Latest", icon("messages-square"))}
+      ${item("/unanswered", "Unanswered", icon("circle-help"), { count: props.unanswered })}
       ${props.user ? item("/topics/mine", "Your topics", icon("bell")) : ""}
       ${props.user?.is_admin ? item("/admin", "Moderation", icon("shield")) : ""}
     </ul>
     <h2 class="side-head">Categories</h2>
-    <ul class="side-list">
-      ${props.categories.map(
-        (c) => html`<li><a href="/c/${c.slug}" class="side-link${here === `/c/${c.slug}` ? " active" : ""}">
-          <span class="cat-sq" style="--cat:${categoryColour(c.id)}" aria-hidden="true"></span><span>${c.name}</span>
-        </a></li>`,
-      )}
-    </ul>
-    <h2 class="side-head">Resources</h2>
+    <ul class="side-list">${props.categories.filter((c) => !c.archived).map(categoryLink)}</ul>
+    ${archived.length
+      ? html`<h2 class="side-head">Archive</h2>
+          <ul class="side-list side-archive">${archived.map(categoryLink)}</ul>`
+      : ""}
+    <h2 class="side-head">Help</h2>
     <ul class="side-list">
       ${item("/guidelines", "Guidelines", icon("file-text"))}
+      ${item("https://www.nodebox.net/node/", "Documentation", icon("book-open"), { external: true })}
       ${item("/aup", "Acceptable use", icon("scale"))}
-      ${item("https://www.nodebox.net/node/", "Documentation", icon("book-open"), true)}
-      ${item("https://www.nodebox.net/", "nodebox.net", icon("external-link"), true)}
+      ${item("https://www.nodebox.net/", "nodebox.net", icon("external-link"), { external: true })}
     </ul>
   </nav>`;
 }
@@ -81,25 +98,20 @@ export function layout(props: LayoutProps, content: Html): Html {
 </head>
 <body>
   <a class="skip" href="#main">Skip to content</a>
-  ${props.showBanner
-    ? html`<div class="banner" data-banner>
-        <div class="wrap grid">
-          <p><strong>Welcome to the new NodeBox forum.</strong>
-          Had an account on the old one? <a href="${signInHref}">Sign in with the same email</a> and your posts are waiting for you.</p>
-          <button type="button" class="icon-button banner-close" data-dismiss-banner aria-label="Dismiss">${icon("x", { size: 16 })}</button>
-        </div>
-      </div>`
-    : ""}
   <header class="site-header">
     <div class="wrap grid header-row">
       <div class="header-brand">
         <button type="button" class="icon-button nav-toggle" data-nav-toggle aria-controls="sidebar" aria-expanded="false" aria-label="Menu">${icon("menu", { size: 20 })}</button>
         <a class="brand" href="/">${logo}<span class="brand-word">NodeBox</span><span class="brand-sub">Forum</span></a>
       </div>
+      <form class="search" role="search" method="get" action="/search">
+        <label class="visually-hidden" for="search-q">Search the forum</label>
+        ${icon("search", { size: 18 })}
+        <input id="search-q" name="q" type="search" value="${props.query ?? ""}" placeholder="Search questions and answers" autocomplete="off">
+      </form>
       <nav class="header-nav" aria-label="Account">
         ${props.user
-          ? html`<a class="button button-light" href="/new">${icon("plus", { size: 16 })}<span>New topic</span></a>
-              <a class="icon-button header-icon" href="/topics/mine" aria-label="Your topics" title="Your topics">${icon("bell", { size: 20 })}</a>
+          ? html`<a class="icon-button header-icon" href="/topics/mine" aria-label="Your topics" title="Your topics">${icon("bell", { size: 20 })}</a>
               <details class="user-menu">
                 <summary aria-label="Account menu">${avatar(props.user, "sm")}</summary>
                 <div class="user-menu-panel">
@@ -117,6 +129,14 @@ export function layout(props: LayoutProps, content: Html): Html {
   <div class="wrap grid shell">
     ${sidebar(props)}
     <main id="main" class="main ${props.mainClass ?? ""}">
+      ${props.alert ? html`<p class="welcome alert" role="status">${icon("lock", { size: 18 })}<span>${props.alert}</span></p>` : ""}
+      ${props.showBanner && !props.alert
+        ? html`<aside class="welcome" data-banner aria-label="About this forum">
+            <p><strong>Welcome to the new NodeBox forum.</strong>
+            Had an account on the old one? <a href="${signInHref}">Sign in with the same email</a> and your posts are waiting for you.</p>
+            <button type="button" class="icon-button" data-dismiss-banner aria-label="Dismiss">${icon("x", { size: 18 })}</button>
+          </aside>`
+        : ""}
       ${props.notice ? html`<p class="notice" role="status">${icon("circle-check", { size: 18 })}<span>${props.notice}</span></p>` : ""}
       ${content}
     </main>

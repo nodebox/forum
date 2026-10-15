@@ -1,0 +1,95 @@
+/* Proposal B: "Print". After the Braille Institute print work that Atkinson Hyperlegible
+ * was made for: white paper, very large bold headlines, flat colour fields (sky blue for
+ * the question, sand for notices and unanswered topics) instead of hairlines and boxes.
+ * Challenges two decisions: the navy header bar becomes white, and the copper marks
+ * become sand fields. */
+@import "base.css";
+
+:root {
+  --navy: #041a32;
+  --paper: #ffffff;
+  --ink: #041a32;
+  --ink-2: #2c3e55;
+  --ink-3: #50607a;
+  --rule: #041a32;
+  --wash: #eef5fb;
+  --sky: #d3e9f7;            /* question fields; navy text on it is 14.6:1 */
+  --sand: #f0e4c8;           /* answers and notices; navy text on it is 14.9:1 */
+  --link: #0f4f8f;
+  --focus: #0f4f8f;
+  --button: #041a32;
+  --button-hover: #0f4f8f;
+  --on-button: #fff;
+  --open: #0f4f8f;
+  --heart: #b23b3b;
+  --code-bg: #041a32;
+  --code-ink: #e3ebf5;
+}
+
+body { font-size: 17px; line-height: 28px; }
+
+/* Header: white, with one heavy rule, like the brochure's top edge. */
+.site-header { background: var(--paper); color: var(--navy); border-bottom: 4px solid var(--navy); }
+.brand-sub { color: var(--ink-3); }
+.search input { border: 2px solid var(--navy); background: #fff; border-radius: 0; height: 48px; }
+.search input:focus { outline: 3px solid var(--sky); outline-offset: 0; }
+.button { min-height: 48px; font-size: 17px; }
+.button-light { background: var(--navy); color: #fff; }
+.button-light:hover { background: var(--button-hover); }
+.button-quiet { border-color: var(--navy); }
+
+.side-link { font-size: 17px; }
+.side-link.active { background: var(--sky); }
+.side-link:hover { background: var(--wash); }
+.side-head { color: var(--ink); font-size: 17px; font-weight: 800; }
+
+.welcome { background: var(--sand); color: var(--ink); font-size: 17px; line-height: 28px; padding: 20px 20px 20px 24px; }
+
+/* Headlines: big, heavy, underlined the way "Make Reading Possible." is. */
+.page-head h1, .topic-head h1 { font-size: 52px; line-height: 56px; font-weight: 800; letter-spacing: -0.03em; }
+.page-head h1 { text-decoration: underline; text-decoration-thickness: 6px; text-underline-offset: 10px; }
+.lede { font-size: 20px; line-height: 28px; color: var(--ink); margin-top: 20px; }
+
+.tabs { border-bottom: 0; gap: 8px; margin-top: 8px; margin-bottom: 8px; }
+.tab { padding: 8px 16px; border: 2px solid var(--navy); margin: 0; }
+.tab.active { background: var(--navy); color: #fff; }
+.tab.active .tab-count { color: #c9d5e3; }
+
+.topic-item { border-bottom: 2px solid var(--navy); padding: 28px 0; }
+.topic-item:last-child { border-bottom: 0; }
+.topic-item-title { font-size: 24px; line-height: 32px; font-weight: 800; }
+.topic-item-excerpt { font-size: 17px; line-height: 28px; color: var(--ink-2); }
+.label-open { background: var(--sand); color: var(--ink); padding: 0 8px; }
+
+/* Topic: the question sits in a sky field; replies sit on white under heavy rules. */
+.topic-head h1 { font-size: 44px; line-height: 48px; }
+.topic-byline { font-size: 17px; }
+.post { border-top: 2px solid var(--navy); padding: 32px 0; }
+.post-first { background: var(--sky); border-top: 0; margin-bottom: 0; }
+.post-first .post-avatar { padding-left: 24px; }
+.post-first .post-main { padding-right: 24px; }
+.post-first .prose code, .post-first .file-icon { background: rgb(255 255 255 / 60%); }
+.post-first .file-card, .post-first .gallery img { border-color: var(--navy); background: #fff; }
+.post-first + .post { border-top: 0; }
+.prose { font-size: 19px; line-height: 30px; }
+.prose code { background: var(--wash); }
+.file-card { border: 2px solid var(--navy); }
+.action { font-size: 16px; }
+.action:hover { background: var(--wash); }
+
+.reply-prompt { border-top: 0; background: var(--sky); padding: 32px; grid-column: 1 / 8; }
+.reply-prompt h2 { font-size: 28px; line-height: 32px; }
+
+.site-footer { background: var(--navy); color: #c9d5e3; padding: 32px 0 48px; font-size: 16px; }
+.site-footer a { color: #fff; }
+
+@media (max-width: 720px) {
+  .page-head h1 { font-size: 44px; line-height: 48px; }
+  .topic-head h1 { font-size: 34px; line-height: 40px; }
+  .post-first { padding: 24px 16px; margin: 0 -16px; }
+  .post-first .post-main { padding-right: 0; }
+  .prose { font-size: 18px; line-height: 28px; }
+  .reply-prompt { padding: 24px 16px; margin: 0 -16px; }
+  .tabs { flex-wrap: wrap; }
+}
+

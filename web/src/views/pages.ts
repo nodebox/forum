@@ -2,6 +2,7 @@ import { html, raw } from "hono/html";
 import { REACTIONS, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
 import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
+import { excerpt } from "../markdown.ts";
 import { avatar, categoryBadge, type Html } from "./layout.ts";
 import { icon } from "./icons.ts";
 import { postModMenu, topicModBar } from "./admin.ts";
@@ -11,11 +12,11 @@ const time = (iso: string) => html`<time datetime="${iso}" title="${new Date(iso
 
 export const topicUrl = (t: { id: number; slug: string }) => `/t/${t.id}/${t.slug}`;
 
-/** Small status icons before a topic title, as on Discourse. */
-function statusIcons(t: { pinned: number; locked: number; solved: number }): Html {
-  return html`${t.pinned ? html`<span class="status" title="Pinned">${icon("pin", { size: 16, label: "Pinned" })}</span>` : ""}${t.locked
-    ? html`<span class="status" title="Locked">${icon("lock", { size: 16, label: "Locked" })}</span>`
-    : ""}${t.solved ? html`<span class="status status-solved" title="Solved">${icon("circle-check", { size: 16, label: "Solved" })}</span>` : ""}`;
+/** Pinned and locked, written out: a word is easier to read than an icon alone. */
+function statusLabels(t: { pinned: number; locked: number }): Html {
+  return html`${t.pinned ? html`<span class="label">${icon("pin", { size: 16 })}Pinned</span>` : ""}${t.locked
+    ? html`<span class="label">${icon("lock", { size: 16 })}Locked</span>`
+    : ""}`;
 }
 
 interface ListRow {
@@ -30,38 +31,59 @@ interface ListRow {
   category_id: number;
   category_name: string;
   category_slug: string;
+  category_archived?: number;
+  author_name?: string;
+  last_post_user_name?: string | null;
+  first_body?: string | null;
+  tender_id?: number | null;
 }
 
-/** The topic table: Topic | Replies | Activity, on the main grid. */
-function topicTable<T extends ListRow>(topics: T[], opts: { showCategory: boolean; href?: (t: T) => string; meta: (t: T) => Html; unread?: (t: T) => boolean }): Html {
-  return html`<div class="topic-table" role="table" aria-label="Topics">
-    <div class="topic-row topic-row-head" role="row">
-      <span role="columnheader">Topic</span><span role="columnheader" class="num">Replies</span><span role="columnheader" class="num">Activity</span>
-    </div>
-    ${topics.map(
-      (t) => html`<div class="topic-row${opts.unread?.(t) ? " unread" : ""}" role="row">
-        <div class="topic-cell" role="cell">
-          <a class="topic-title" href="${opts.href ? opts.href(t) : topicUrl(t)}">${statusIcons(t)}<span>${t.title}</span></a>
-          <div class="topic-meta">
-            ${opts.showCategory ? categoryBadge({ id: t.category_id, slug: t.category_slug, name: t.category_name }) : ""}
-            ${opts.meta(t)}
-          </div>
+/**
+ * The topic list, on the content grid: title, one line of the opening post and who/where
+ * on columns 1-7; replies and last activity on 8-9.
+ */
+function topicTable<T extends ListRow>(
+  topics: T[],
+  opts: { showCategory: boolean; href?: (t: T) => string; meta?: (t: T) => Html; unread?: (t: T) => boolean; excerpt?: (t: T) => string | null },
+): Html {
+  return html`<ol class="topics">
+    ${topics.map((t) => {
+      const replies = t.post_count - 1;
+      const line = opts.excerpt ? opts.excerpt(t) : t.first_body ? excerpt(t.first_body, 200) : null;
+      return html`<li class="topic-item${opts.unread?.(t) ? " unread" : ""}">
+        <div class="topic-item-main">
+          <h2 class="topic-item-title"><a href="${opts.href ? opts.href(t) : topicUrl(t)}">${t.title}</a></h2>
+          ${line ? html`<p class="topic-item-excerpt">${line}</p>` : ""}
+          <p class="topic-item-meta">
+            ${statusLabels(t)}
+            ${opts.showCategory ? categoryBadge({ id: t.category_id, slug: t.category_slug, name: t.category_name, archived: t.category_archived }) : ""}
+            ${t.author_name ? html`<span>${t.author_name}</span>` : ""}
+            ${t.tender_id ? html`<span>From the old forum</span>` : ""}
+            ${opts.meta?.(t) ?? ""}
+          </p>
         </div>
-        <span class="num replies" role="cell">${t.post_count - 1}</span>
-        <span class="num activity" role="cell">${time(t.last_post_at)}</span>
-      </div>`,
-    )}
-  </div>`;
+        <div class="topic-item-stats">
+          ${replies > 0
+            ? html`<p class="stat-replies"><strong>${replies}</strong> ${replies === 1 ? "reply" : "replies"}</p>`
+            : html`<p class="stat-replies none">No replies yet</p>`}
+          <p class="stat-last">${time(t.last_post_at)}${replies > 0 && t.last_post_user_name ? html`<span> by ${firstName(t.last_post_user_name)}</span>` : ""}</p>
+        </div>
+      </li>`;
+    })}
+  </ol>`;
 }
 
-function topicList(topics: TopicRow[], opts: { showCategory: boolean }): Html {
-  if (topics.length === 0) return html`<p class="empty">No topics yet. Be the first to start one.</p>`;
-  return topicTable(topics, { showCategory: opts.showCategory, meta: (t) => html`<span>${t.author_name}</span>` });
+const firstName = (name: string) => name.split(/\s+/)[0] ?? name;
+
+function topicList(topics: ListRow[], opts: { showCategory: boolean; empty?: string }): Html {
+  if (topics.length === 0) return html`<p class="empty">${opts.empty ?? "No topics yet. Be the first to start one."}</p>`;
+  return topicTable(topics, { showCategory: opts.showCategory });
 }
 
 function pager(base: string, page: number, hasMore: boolean): Html {
   if (page <= 1 && !hasMore) return html``;
-  const href = (p: number) => (p <= 1 ? base : `${base}?page=${p}`);
+  const sep = base.includes("?") ? "&" : "?";
+  const href = (p: number) => (p <= 1 ? base : `${base}${sep}page=${p}`);
   return html`<nav class="pager" aria-label="Pages">
     ${page > 1 ? html`<a class="button button-quiet" href="${href(page - 1)}">${icon("chevron-left", { size: 16 })}Newer</a>` : html`<span></span>`}
     <span class="muted">Page ${page}</span>
@@ -80,27 +102,74 @@ function mainHead(opts: { title: string; lede?: string | Html; action?: Html; ki
   </header>`;
 }
 
-export function homePage(_categories: Category[], latest: TopicRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
+const newTopicButton = (signedIn: boolean, category?: string) => {
+  const target = category ? `/new?category=${category}` : "/new";
+  return html`<a class="button button-primary" href="${signedIn ? target : `/signin?next=${encodeURIComponent(target)}`}">${icon("plus", { size: 16 })}New topic</a>`;
+};
+
+function listTabs(active: "latest" | "unanswered"): Html {
+  const tab = (href: string, key: string, label: string) =>
+    html`<a href="${href}" class="tab${active === key ? " active" : ""}" ${active === key ? raw('aria-current="page"') : ""}>${label}</a>`;
+  return html`<nav class="tabs" aria-label="Show">${tab("/", "latest", "All topics")}${tab("/unanswered", "unanswered", "Unanswered")}</nav>`;
+}
+
+export function homePage(_categories: Category[], latest: ListRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
   return html`
     ${mainHead({
       title: page === 1 ? "Latest" : `Latest, page ${page}`,
-      lede: page === 1 ? "Questions, projects and bugs from the NodeBox community. Drop a project ZIP or a screenshot right into your post." : undefined,
-      action: html`<a class="button button-primary" href="${signedIn ? "/new" : "/signin?next=/new"}">${icon("plus", { size: 16 })}New topic</a>`,
+      lede: page === 1 ? "Questions, projects and bugs from the NodeBox community. Search first: many questions have been answered before." : undefined,
+      action: newTopicButton(signedIn),
     })}
+    ${listTabs("latest")}
     ${topicList(latest, { showCategory: true })}
     ${pager("/", page, hasMore)}`;
 }
 
-export function categoryPage(category: Category, topics: TopicRow[], page: number, hasMore: boolean): Html {
+export function unansweredPage(topics: ListRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
+  return html`
+    ${mainHead({
+      title: "Unanswered",
+      lede: "Topics nobody has replied to yet. If you know something that helps, this is where it counts most.",
+      action: newTopicButton(signedIn),
+    })}
+    ${listTabs("unanswered")}
+    ${topicList(topics, { showCategory: true, empty: "Every topic has a reply. Nice." })}
+    ${pager("/unanswered", page, hasMore)}`;
+}
+
+export function searchPage(q: string, hits: (ListRow & { snippet: string | null })[], page: number, hasMore: boolean, signedIn: boolean): Html {
+  return html`
+    ${mainHead({
+      title: q ? `Results for “${q}”` : "Search",
+      lede: q ? undefined : "Search topic titles and posts.",
+      action: newTopicButton(signedIn),
+    })}
+    ${q
+      ? hits.length === 0
+        ? html`<p class="empty">Nothing matches “${q}”. Try fewer or different words, or ask it as a new topic.</p>`
+        : topicTable(hits, { showCategory: true, excerpt: (t) => (t.snippet ? excerpt(t.snippet, 220) : t.first_body ? excerpt(t.first_body, 200) : null) })
+      : ""}
+    ${pager(`/search?q=${encodeURIComponent(q)}`, page, hasMore)}`;
+}
+
+export function categoryPage(category: Category, topics: ListRow[], page: number, hasMore: boolean, signedIn: boolean): Html {
+  const count = html`<span>${category.topic_count} ${category.topic_count === 1 ? "topic" : "topics"}</span>`;
   return html`
     ${mainHead({
       title: category.name,
       lede: category.description || undefined,
-      kicker: html`<p class="kicker">${categoryBadge(category)} · ${category.topic_count} ${category.topic_count === 1 ? "topic" : "topics"}</p>`,
-      action: html`<a class="button button-primary" href="/new?category=${category.slug}">${icon("plus", { size: 16 })}New topic</a>`,
+      kicker: html`<p class="kicker">${category.archived ? html`<span class="label label-archived">${icon("archive", { size: 16 })}Archive</span>` : ""}${count}</p>`,
+      action: category.archived ? undefined : newTopicButton(signedIn, category.slug),
     })}
+    ${category.archived ? archiveNote(category.name) : ""}
     ${topicList(topics, { showCategory: false })}
     ${pager(`/c/${category.slug}`, page, hasMore)}`;
+}
+
+/** Why an archived category is quiet, and where to go instead. */
+function archiveNote(name: string): Html {
+  return html`<p class="archive-note">${icon("archive", { size: 18 })}<span><strong>${name} is archived.</strong>
+    Its topics stay here to read and search, but it takes no new topics. Questions about current NodeBox go in <a href="/">the active categories</a>.</span></p>`;
 }
 
 export interface RenderedPost {
@@ -119,8 +188,13 @@ function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | n
   const byEmoji = new Map(reactions.map((r) => [r.emoji, r]));
   const needsSignin = user ? "" : raw("data-needs-signin");
   const heart = byEmoji.get(HEART);
-  // Emoji people used come first; the rest open from the smiley. The heart is the one-click "this helped" (as on Discourse).
+  // The heart is the one-click "this helped" (as on Discourse). Emoji people used follow; the rest open from React.
   return html`<form class="reactions" method="post" action="/posts/${post.id}/react" data-reactions>
+    <button type="submit" name="emoji" value="${HEART}"
+      class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
+      aria-pressed="${heart?.mine ? "true" : "false"}" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
+      ${icon("heart", { size: 18, class: "heart-icon" })}<span class="reaction-count">${heart ? heart.count : ""}</span><span class="heart-label">Like</span>
+    </button>
     ${REACTIONS.filter((e) => e !== HEART).map((emoji) => {
       const r = byEmoji.get(emoji);
       const label = r ? `${r.names} reacted ${emoji}` : `React ${emoji}`;
@@ -130,12 +204,7 @@ function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | n
         <span class="emoji">${emoji}</span><span class="reaction-count">${r ? r.count : ""}</span>
       </button>`;
     })}
-    <button type="button" class="icon-button react-toggle" aria-label="Add a reaction" title="Add a reaction">${icon("smile-plus")}</button>
-    <button type="submit" name="emoji" value="${HEART}"
-      class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
-      aria-pressed="${heart?.mine ? "true" : "false"}" aria-label="Like" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
-      <span class="reaction-count">${heart ? heart.count : ""}</span>${icon("heart", { class: "heart-icon" })}
-    </button>
+    <button type="button" class="action react-toggle" title="Add a reaction">${icon("smile-plus", { size: 18 })}<span>React</span></button>
   </form>`;
 }
 
@@ -159,29 +228,31 @@ export function topicPage(
   const isAdmin = Boolean(user?.is_admin);
   const here = opts.page > 1 ? `${topicUrl(topic)}?page=${opts.page}` : topicUrl(topic);
   const replies = topic.post_count - 1;
+  const canReply = !opts.hasMore && !topic.locked;
+  const signInToReply = `/signin?next=${encodeURIComponent(topicUrl(topic))}`;
   return html`<div class="topic">
     <header class="topic-head">
-      <p class="kicker">${categoryBadge({ id: topic.category_id, slug: topic.category_slug, name: topic.category_name })}${topic.tender_id
+      <p class="kicker">${categoryBadge({ id: topic.category_id, slug: topic.category_slug, name: topic.category_name, archived: topic.category_archived })}${topic.category_archived ? html`<span class="label label-archived">${icon("archive", { size: 16 })}Archive</span>` : ""}${topic.tender_id
         ? html`<span class="tag" title="This topic was moved here from the old forum">From the old forum</span>`
         : ""}</p>
-      <h1>${statusIcons(topic)}<span>${topic.title}</span></h1>
-    </header>
-
-    <aside class="topic-aside" aria-label="About this topic">
-      <dl class="topic-facts">
-        <div><dt>Replies</dt><dd>${replies}</dd></div>
-        <div><dt>Started</dt><dd>${time(topic.created_at)}</dd></div>
-        <div><dt>Last reply</dt><dd>${replies > 0 ? time(topic.last_post_at) : "None yet"}</dd></div>
-      </dl>
-      ${user ? watchForm(topic, opts.watching) : ""}
-      ${canSolve
-        ? html`<form method="post" action="/t/${topic.id}/solved">
-            <button class="button button-quiet button-block" type="submit" name="solved" value="${topic.solved ? "0" : "1"}">${icon("circle-check", { size: 16 })}${topic.solved ? "Mark as not solved" : "Mark as solved"}</button>
-          </form>`
-        : ""}
-      ${!opts.hasMore && !topic.locked ? html`<a class="button button-primary button-block" href="${user ? "#reply" : `/signin?next=${encodeURIComponent(topicUrl(topic))}`}">${icon("reply", { size: 16 })}Reply</a>` : ""}
+      <h1>${topic.title}</h1>
+      <div class="topic-byline">
+        <div class="topic-starter">
+          ${avatar({ id: topic.user_id, name: topic.author_name })}
+          <p><strong>${topic.author_name}</strong><span class="topic-facts">
+            <span>Started ${time(topic.created_at)}</span>
+            <span>${replies === 0 ? "No replies yet" : replies === 1 ? "1 reply" : `${replies} replies`}</span>
+            ${replies > 0 ? html`<span>Last reply ${time(topic.last_post_at)}</span>` : ""}
+            ${statusLabels(topic)}
+          </span></p>
+        </div>
+        <div class="topic-actions">
+          ${canReply ? html`<a class="button button-primary" href="${user ? "#reply" : signInToReply}">${icon("reply", { size: 16 })}Reply</a>` : ""}
+          ${user ? watchForm(topic, opts.watching) : ""}
+        </div>
+      </div>
       ${isAdmin ? topicModBar(topic) : ""}
-    </aside>
+    </header>
 
     <ol class="posts" start="${opts.firstIndex + 1}">
       ${posts.map(
@@ -189,21 +260,23 @@ export function topicPage(
           <div class="post-avatar">${avatar({ id: p.post.user_id, name: p.post.author_name })}</div>
           <article class="post-main">
             <header class="post-head">
+              <span class="avatar-inline">${avatar({ id: p.post.user_id, name: p.post.author_name }, "sm")}</span>
               <span class="post-author">${p.post.author_name}</span>
               ${p.post.author_is_admin ? html`<span class="tag tag-team">NodeBox team</span>` : ""}
               <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
             </header>
-            <div class="prose">${raw(p.html)}</div>
+            <div class="prose" data-post-body data-author="${p.post.author_name}">${raw(p.html)}</div>
             ${p.images.length
               ? html`<ul class="gallery">${p.images.map((img) => html`<li><a href="${img.full}" target="_blank" rel="noopener"><img src="${img.thumb}" alt="${img.a.filename}" loading="lazy"></a></li>`)}</ul>`
               : ""}
             ${p.files.length ? html`<ul class="files">${p.files.map(fileCard)}</ul>` : ""}
             <footer class="post-actions">
-              ${isAdmin ? postModMenu(p.post, here) : ""}
               ${p.post.status === "visible"
-                ? html`<a class="icon-button" href="#post-${p.post.id}" aria-label="Link to this post" title="Link to this post">${icon("link")}</a>
-                    ${reactionBar(p.post, p.reactions, user)}`
+                ? html`${reactionBar(p.post, p.reactions, user)}
+                    ${user && canReply ? html`<button type="button" class="action" data-quote>${icon("quote", { size: 18 })}<span>Quote</span></button>` : ""}
+                    <a class="action" href="#post-${p.post.id}" data-copy-link title="Copy a link to this post">${icon("link", { size: 18 })}<span>Copy link</span></a>`
                 : ""}
+              ${isAdmin ? postModMenu(p.post, here) : ""}
             </footer>
           </article>
         </li>`,
@@ -224,7 +297,11 @@ export function topicPage(
                   ${composer({ action: `/t/${topic.id}/reply`, submitLabel: "Post reply" })}
                 </div>
               </section>`
-            : html`<p class="signin-prompt"><a class="button button-primary" href="/signin?next=${encodeURIComponent(topicUrl(topic))}">${icon("log-in", { size: 16 })}Sign in to reply</a></p>`}
+            : html`<section class="reply-prompt">
+                <h2>Know something that helps?</h2>
+                <p>Sign in with your email address to reply. No password needed.</p>
+                <a class="button button-primary" href="${signInToReply}">${icon("log-in", { size: 16 })}Sign in to reply</a>
+              </section>`}
     </div>
   </div>`;
 }
@@ -232,10 +309,10 @@ export function topicPage(
 function watchForm(topic: TopicRow, watching: boolean): Html {
   return html`<form method="post" action="/t/${topic.id}/watch" class="watch-form">
     <input type="hidden" name="watch" value="${watching ? "0" : "1"}">
-    <button type="submit" class="button button-quiet button-block watch${watching ? " on" : ""}" aria-pressed="${watching ? "true" : "false"}">
+    <button type="submit" class="button button-quiet watch${watching ? " on" : ""}" aria-pressed="${watching ? "true" : "false"}"
+      title="${watching ? "You get an email digest when people reply. Click to stop." : "Get an email digest when people reply."}">
       ${icon(watching ? "eye" : "eye-off", { size: 16 })}${watching ? "Watching" : "Watch"}
     </button>
-    <p class="hint">${watching ? "You get an email digest when people reply." : "Get an email digest when people reply."}</p>
   </form>`;
 }
 
@@ -249,17 +326,14 @@ export function yourTopicsPage(topics: YourThread[], digest: boolean): Html {
     })}
     ${topics.length === 0
       ? html`<p class="empty">Nothing here yet. Start a topic or reply to one and it shows up here.</p>`
-      : topicTable(
-          topics,
-          {
-            showCategory: true,
-            href: (t) => (t.new_posts > 0 ? `/t/${t.id}/unread` : topicUrl(t)),
-            unread: (t) => t.new_posts > 0,
-            meta: (t) => html`${t.new_posts > 0 ? html`<span class="tag tag-new">${t.new_posts} new</span>` : ""}
+      : topicTable(topics, {
+          showCategory: true,
+          href: (t) => (t.new_posts > 0 ? `/t/${t.id}/unread` : topicUrl(t)),
+          unread: (t) => t.new_posts > 0,
+          meta: (t) => html`${t.new_posts > 0 ? html`<span class="tag tag-new">${t.new_posts} new</span>` : ""}
               <span>${t.started ? "You started this" : "You replied"}</span>
-              ${t.watching ? html`<span class="watching-mark">${icon("eye", { size: 14 })}Watching</span>` : ""}`,
-          },
-        )}`;
+              ${t.watching ? html`<span class="label">${icon("eye", { size: 16 })}Watching</span>` : ""}`,
+        })}`;
 }
 
 export function composer(opts: { action: string; submitLabel: string; body?: string; titleField?: Html; error?: string }): Html {

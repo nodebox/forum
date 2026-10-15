@@ -21,6 +21,8 @@ export interface Category {
   description: string;
   position: number;
   topic_count: number;
+  /** No new topics; listed apart in the sidebar. */
+  archived: number;
 }
 
 export interface TopicRow {
@@ -42,6 +44,7 @@ export interface TopicRow {
   last_post_user_name: string | null;
   category_slug: string;
   category_name: string;
+  category_archived: number;
 }
 
 export interface PostRow {
@@ -86,7 +89,7 @@ export const REACTIONS = ["👍", "❤️", "😄", "🎉", "🤔", "👀"] as c
 
 const TOPIC_SELECT = `
   SELECT t.*, u.name AS author_name, lu.name AS last_post_user_name,
-         c.slug AS category_slug, c.name AS category_name
+         c.slug AS category_slug, c.name AS category_name, c.archived AS category_archived
   FROM topics t
   JOIN users u ON u.id = t.user_id
   LEFT JOIN users lu ON lu.id = t.last_post_user_id
@@ -101,19 +104,74 @@ export async function getCategory(db: D1Database, slug: string): Promise<Categor
   return db.prepare("SELECT * FROM categories WHERE slug = ?").bind(slug).first<Category>();
 }
 
-export async function latestTopics(db: D1Database, limit: number, offset = 0): Promise<TopicRow[]> {
+/** A topic in a list: the topic plus the start of its opening post, for the excerpt line. */
+export interface ListTopic extends TopicRow {
+  first_body: string | null;
+}
+
+const LIST_SELECT = TOPIC_SELECT.replace(
+  "c.name AS category_name",
+  `c.name AS category_name,
+         (SELECT substr(p.body, 1, 600) FROM posts p WHERE p.topic_id = t.id AND p.status = 'visible' ORDER BY p.created_at, p.id LIMIT 1) AS first_body`,
+);
+
+/** Topics nobody has answered yet: only the opening post. */
+const UNANSWERED = "t.post_count <= 1 AND t.locked = 0 AND t.category_id NOT IN (SELECT id FROM categories WHERE archived = 1)";
+
+export async function latestTopics(db: D1Database, limit: number, offset = 0, opts: { unanswered?: boolean } = {}): Promise<ListTopic[]> {
   const { results } = await db
-    .prepare(`${TOPIC_SELECT} WHERE t.status = 'visible' ORDER BY t.last_post_at DESC LIMIT ? OFFSET ?`)
+    .prepare(`${LIST_SELECT} WHERE t.status = 'visible' ${opts.unanswered ? `AND ${UNANSWERED}` : ""} ORDER BY t.last_post_at DESC LIMIT ? OFFSET ?`)
     .bind(limit, offset)
-    .all<TopicRow>();
+    .all<ListTopic>();
   return results;
 }
 
-export async function categoryTopics(db: D1Database, categoryId: number, limit: number, offset: number): Promise<TopicRow[]> {
+export async function categoryTopics(db: D1Database, categoryId: number, limit: number, offset: number): Promise<ListTopic[]> {
   const { results } = await db
-    .prepare(`${TOPIC_SELECT} WHERE t.category_id = ? AND t.status = 'visible' ORDER BY t.pinned DESC, t.last_post_at DESC LIMIT ? OFFSET ?`)
+    .prepare(`${LIST_SELECT} WHERE t.category_id = ? AND t.status = 'visible' ORDER BY t.pinned DESC, t.last_post_at DESC LIMIT ? OFFSET ?`)
     .bind(categoryId, limit, offset)
-    .all<TopicRow>();
+    .all<ListTopic>();
+  return results;
+}
+
+export async function unansweredCount(db: D1Database): Promise<number> {
+  const row = await db.prepare(`SELECT count(*) AS n FROM topics t WHERE t.status = 'visible' AND ${UNANSWERED}`).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Turns what someone typed into an FTS5 query: every word must appear, the last one as a prefix. */
+export function ftsQuery(q: string): string | null {
+  const words = q.match(/[\p{L}\p{N}_]+/gu)?.slice(0, 8) ?? [];
+  if (words.length === 0) return null;
+  return words.map((w, i) => `"${w}"${i === words.length - 1 ? "*" : ""}`).join(" ");
+}
+
+export interface SearchHit extends ListTopic {
+  snippet: string;
+}
+
+/** Topics whose title or visible posts match, best match first. */
+export async function searchTopics(db: D1Database, q: string, limit: number, offset: number): Promise<SearchHit[]> {
+  const match = ftsQuery(q);
+  if (!match) return [];
+  const { results } = await db
+    .prepare(
+      `WITH hits AS (
+         SELECT p.topic_id, bm25(posts_fts) AS rank, snippet(posts_fts, 0, '', '', '…', 24) AS snippet
+         FROM posts_fts JOIN posts p ON p.id = posts_fts.rowid
+         WHERE posts_fts MATCH ?1 AND p.status = 'visible'
+         UNION ALL
+         SELECT topics_fts.rowid, bm25(topics_fts) - 10, NULL
+         FROM topics_fts WHERE topics_fts MATCH ?1
+       ), best AS (
+         SELECT topic_id, min(rank) AS rank, max(snippet) AS snippet FROM hits GROUP BY topic_id
+       )
+       ${LIST_SELECT.replace("FROM topics t", "FROM best b JOIN topics t ON t.id = b.topic_id").replace("SELECT t.*", "SELECT t.*, b.snippet")}
+       WHERE t.status = 'visible'
+       ORDER BY b.rank LIMIT ?2 OFFSET ?3`,
+    )
+    .bind(match, limit, offset)
+    .all<SearchHit>();
   return results;
 }
 

@@ -1,9 +1,12 @@
 -- Sample content for local development only.
 INSERT INTO categories (id, slug, name, description, position, topic_count) VALUES
- (1, 'questions', 'Questions', 'Stuck on something? Ask here, and attach your project.', 1, 3),
- (2, 'show-and-tell', 'Show and tell', 'Share what you made with NodeBox.', 2, 1),
- (3, 'bugs', 'Bug reports', 'Something broken? Tell us what you did and what happened.', 3, 1),
- (4, 'nodes', 'Custom nodes', 'Writing your own nodes in Python or Clojure.', 4, 0);
+ (1, 'general-discussion', 'General Discussion', 'Questions and talk about NodeBox. Stuck on something? Ask here, and attach your project.', 1, 2),
+ (2, 'show-your-work', 'Show Your Work', 'Share what you made with NodeBox.', 2, 1),
+ (3, 'nodebox-3', 'NodeBox 3', 'The desktop app: bugs, nodes and how-tos.', 3, 1),
+ (4, 'nodebox-live', 'NodeBox Live', 'NodeBox in the browser.', 4, 0),
+ (5, 'nodebox-1', 'NodeBox 1', 'The original Python app for Mac, no longer developed.', 5, 1),
+ (6, 'nodebox-opengl', 'NodeBox OpenGL', 'The Python library for OpenGL, no longer developed.', 6, 0);
+UPDATE categories SET archived = 1 WHERE slug IN ('nodebox-1', 'nodebox-opengl');
 
 INSERT INTO users (id, email, name, is_admin, created_at, tender_id) VALUES
  (1, 'frederik@example.com', 'Frederik De Bleser', 1, '2010-01-01T00:00:00Z', 101),
@@ -17,6 +20,7 @@ INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post
  (2, 2, 4, 'Generative posters for a jazz festival', 'generative-posters-for-a-jazz-festival', '2026-10-10T14:00:00Z', '2026-10-12T11:05:00Z', 2, 2, 0, 0, 'visible', NULL),
  (3, 1, 2, 'Welcome to the new forum: read this first', 'welcome-to-the-new-forum-read-this-first', '2026-10-01T10:00:00Z', '2026-10-01T10:00:00Z', 2, 1, 1, 0, 'visible', NULL),
  (4, 3, 2, 'Import SVG crashes on files with gradients', 'import-svg-crashes-on-files-with-gradients', '2014-05-02T10:00:00Z', '2014-05-03T12:00:00Z', 1, 2, 0, 1, 'visible', 4711),
+ (6, 5, 4, 'Drawing a path along a Bézier curve with the Bezier library', 'drawing-a-path-along-a-bezier-curve', '2009-03-14T10:00:00Z', '2009-03-14T10:00:00Z', 4, 1, 0, 0, 'visible', 4700),
  (5, 1, 5, 'Pakketmelding: verlies uw levering niet!', 'pakketmelding-verlies-uw-levering-niet', '2025-02-01T10:00:00Z', '2025-02-01T10:00:00Z', 5, 0, 0, 0, 'spam', 4712);
 
 INSERT INTO posts (id, topic_id, user_id, body, created_at, status, moderation_reason, tender_number) VALUES
@@ -31,7 +35,7 @@ grid → ellipse.position
 ```
 
 NodeBox matches the two lists element by element, so the first point gets the first row.', '2026-10-11T10:02:00Z', 'visible', NULL, NULL),
- (3, 1, 3, 'That was it, thank you! Marking this as solved.', '2026-10-12T08:40:00Z', 'visible', NULL, NULL),
+ (3, 1, 3, 'That was it, thank you!', '2026-10-12T08:40:00Z', 'visible', NULL, NULL),
  (4, 2, 4, 'Made a set of posters for a small jazz festival. Every poster is the same network with a different seed, and the colours come from the line-up spreadsheet.
 
 Happy to share the project if anyone wants to dig in.', '2026-10-10T14:00:00Z', 'visible', NULL, NULL),
@@ -43,6 +47,7 @@ Happy to share the project if anyone wants to dig in.', '2026-10-10T14:00:00Z', 
 - Mark your topic **solved** when you have an answer.', '2026-10-01T10:00:00Z', 'visible', NULL, NULL),
  (7, 4, 2, 'When I import an SVG that has a linear gradient, NodeBox 3.0.40 crashes with a NullPointerException.', '2014-05-02T10:00:00Z', 'visible', NULL, 1),
  (8, 4, 1, 'Fixed in 3.0.41. Gradients are now ignored on import instead of crashing.', '2014-05-03T12:00:00Z', 'visible', NULL, 2),
+ (10, 6, 4, 'How do I make every point of a path follow a Bézier curve in NodeBox 1? I can draw the curve but not walk along it.', '2009-03-14T10:00:00Z', 'visible', NULL, 1),
  (9, 5, 5, 'Uw pakket kon niet worden bezorgd. Klik hier om uw adres te bevestigen.', '2025-02-01T10:00:00Z', 'spam', 'Classified as spam during import', 1);
 
 INSERT INTO reactions (post_id, user_id, emoji, created_at) VALUES

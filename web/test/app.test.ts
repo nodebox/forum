@@ -14,6 +14,22 @@ const persist = fs.mkdtempSync(path.join(os.tmpdir(), "forum-test-"));
 let proxy: Awaited<ReturnType<typeof getPlatformProxy>>;
 let env: any;
 
+/** Splits a migration into statements; a trigger's body (BEGIN … END;) stays in one piece. */
+function sqlStatements(sql: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  for (const line of sql.replace(/--.*$/gm, "").split("\n")) {
+    current += line + "\n";
+    const inTrigger = /^\s*CREATE\s+TRIGGER/i.test(current) && !/\bEND\s*;\s*$/i.test(current);
+    if (/;\s*$/.test(line) && !inTrigger) {
+      out.push(current.trim().replace(/;$/, ""));
+      current = "";
+    }
+  }
+  if (current.trim()) out.push(current.trim());
+  return out.filter(Boolean);
+}
+
 before(async () => {
   proxy = await getPlatformProxy({ persist: { path: persist } });
   env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost", READ_ONLY: "false" };
@@ -22,7 +38,7 @@ before(async () => {
   const dir = path.join(import.meta.dirname, "../migrations");
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
     const schema = fs.readFileSync(path.join(dir, file), "utf8");
-    for (const stmt of schema.split(/;\s*\n/).map((s) => s.replace(/--.*$/gm, "").trim()).filter(Boolean)) await env.DB.prepare(stmt).run();
+    for (const stmt of sqlStatements(schema)) await env.DB.prepare(stmt).run();
   }
   await env.DB.prepare("INSERT INTO categories (id, slug, name) VALUES (1, 'questions', 'Questions')").run();
 });
@@ -167,7 +183,7 @@ test("watching, grouped digests, hearts, your topics", async () => {
   const [t1, t2] = topics.map((t) => Number(/\/t\/(\d+)/.exec(t)![1]));
 
   // Starting a topic watches it.
-  assert.match(await (await req(topics[0]!, { cookie: ann })).text(), /class="button button-quiet button-block watch on" aria-pressed="true">[\s\S]*?Watching\s*<\/button>/);
+  assert.match(await (await req(topics[0]!, { cookie: ann })).text(), /class="button button-quiet watch on" aria-pressed="true"[^>]*>[\s\S]*?Watching\s*<\/button>/);
   // Nothing new yet, so no digest.
   await sendDigests(mailEnv);
   assert.equal(sent.filter((m) => m.to === "ann@example.com").length, 0);
@@ -336,6 +352,34 @@ test("the spam filter refuses spam from new accounts", async () => {
     delete env.ANTHROPIC_API_KEY;
     api.restore();
   }
+});
+
+test("search, unanswered and archived categories", async () => {
+  await env.DB.prepare("INSERT INTO categories (id, slug, name, archived) VALUES (2, 'nodebox-1', 'NodeBox 1', 1)").run();
+  const zoe = await signIn("zoe@example.com");
+  await req("/settings", { method: "POST", cookie: zoe, body: form({ name: "Zoe", next: "/" }) });
+  const posted = await req("/new", { method: "POST", cookie: zoe, body: form({ title: "Gradient fills on a spiral", category: "questions", body: "How do I give each segment of a spiral its own hue?" }) });
+  assert.equal(posted.status, 302);
+
+  // Found by a word in the post and by a prefix of a word in the title, but not by a word that isn't there.
+  assert.match(await (await req("/search?q=segment")).text(), /Gradient fills on a spiral/);
+  assert.match(await (await req("/search?q=spir")).text(), /Gradient fills on a spiral/);
+  assert.match(await (await req("/search?q=" + encodeURIComponent('"quoted" OR (weird*'))).text(), /Nothing matches/);
+
+  // Nobody replied yet, so it is unanswered; archived categories never count.
+  await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at, post_count) VALUES (9100, 2, 900, 'Ancient question', 'ancient', '2009', '2009', 1)").run();
+  const open = await (await req("/unanswered")).text();
+  assert.match(open, /Gradient fills on a spiral/);
+  assert.doesNotMatch(open, /Ancient question/);
+
+  // An archived category reads fine but takes no new topics.
+  const archive = await (await req("/c/nodebox-1")).text();
+  assert.match(archive, /NodeBox 1 is archived/);
+  assert.doesNotMatch(archive, /New topic/);
+  assert.doesNotMatch(await (await req("/new", { cookie: zoe })).text(), /value="nodebox-1"/);
+  const refused = await req("/new", { method: "POST", cookie: zoe, body: form({ title: "Still using NB1", category: "nodebox-1", body: "Hello" }) });
+  assert.equal(refused.status, 400);
+  assert.match(await refused.text(), /archived and takes no new topics/);
 });
 
 test("read-only: everyone can read and sign in, only admins can write", async () => {

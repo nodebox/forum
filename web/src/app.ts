@@ -13,6 +13,8 @@ import {
   getCategory,
   getTopic,
   latestTopics,
+  searchTopics,
+  unansweredCount,
   listCategories,
   postIndex,
   rateLimit,
@@ -52,6 +54,8 @@ import {
   aupPage,
   guidelinesPage,
   homePage,
+  searchPage,
+  unansweredPage,
   messagePage,
   newTopicPage,
   profileForm,
@@ -96,20 +100,27 @@ async function sidebarCategories(db: D1Database): Promise<Category[]> {
   return categoryCache.list;
 }
 
-async function page(c: Context<AppEnv>, content: Html, opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 422 | 429; mainClass?: string } = {}) {
+async function page(
+  c: Context<AppEnv>,
+  content: Html,
+  opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 422 | 429; mainClass?: string; query?: string } = {},
+) {
   const url = new URL(c.req.url);
-  const categories = await sidebarCategories(c.env.DB);
+  const [categories, unanswered] = await Promise.all([sidebarCategories(c.env.DB), unansweredCount(c.env.DB)]);
   return c.html(
     layout(
       {
         title: opts.title,
         description: opts.description,
         user: c.get("user"),
-        notice: c.get("notice") ?? noticeFromQuery(url) ?? (c.env.READ_ONLY === "true" ? READ_ONLY_NOTICE : null),
-        showBanner: getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
+        notice: c.get("notice") ?? noticeFromQuery(url),
+        alert: c.env.READ_ONLY === "true" ? READ_ONLY_NOTICE : null,
+        showBanner: !c.get("user") && getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
         path: url.pathname + url.search,
         siteName: c.env.SITE_NAME,
         categories,
+        unanswered,
+        query: opts.query,
         mainClass: opts.mainClass,
       },
       content,
@@ -155,13 +166,28 @@ app.get("/", async (c) => {
   return page(c, homePage(categories, topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))));
 });
 
+app.get("/unanswered", async (c) => {
+  const p = pageNumber(c);
+  const topics = await latestTopics(c.env.DB, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE, { unanswered: true });
+  const hasMore = topics.length > TOPICS_PER_PAGE;
+  return page(c, unansweredPage(topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), { title: "Unanswered" });
+});
+
+app.get("/search", async (c) => {
+  const q = (c.req.query("q") ?? "").trim().slice(0, 200);
+  const p = pageNumber(c);
+  const hits = q ? await searchTopics(c.env.DB, q, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE) : [];
+  const hasMore = hits.length > TOPICS_PER_PAGE;
+  return page(c, searchPage(q, hits.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), { title: q ? `Search: ${q}` : "Search", query: q });
+});
+
 app.get("/c/:slug", async (c) => {
   const category = await getCategory(c.env.DB, c.req.param("slug"));
   if (!category) return c.notFound();
   const p = pageNumber(c);
   const topics = await categoryTopics(c.env.DB, category.id, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE);
   const hasMore = topics.length > TOPICS_PER_PAGE;
-  return page(c, categoryPage(category, topics.slice(0, TOPICS_PER_PAGE), p, hasMore), {
+  return page(c, categoryPage(category, topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), {
     title: category.name,
     description: category.description,
   });
@@ -240,7 +266,7 @@ function attachmentIds(form: Record<string, string | File | (string | File)[]>):
 app.get("/new", async (c) => {
   const { redirect } = requireUser(c);
   if (redirect) return redirect;
-  const categories = await listCategories(c.env.DB);
+  const categories = (await listCategories(c.env.DB)).filter((x) => !x.archived);
   return page(c, newTopicPage(categories, c.req.query("category"), {}), { title: "New topic", mainClass: "narrow" });
 });
 
@@ -251,10 +277,11 @@ app.post("/new", async (c) => {
   const title = String(form["title"] ?? "").trim().slice(0, 160);
   const body = String(form["body"] ?? "").trim();
   const category = await getCategory(c.env.DB, String(form["category"] ?? ""));
-  const categories = await listCategories(c.env.DB);
+  const categories = (await listCategories(c.env.DB)).filter((x) => !x.archived);
   const fail = (error: string) =>
     page(c, newTopicPage(categories, category?.slug, { title, body, error }), { title: "New topic", status: 400, mainClass: "narrow" });
   if (!category) return fail("Pick a category.");
+  if (category.archived) return fail(`${category.name} is archived and takes no new topics. Pick another category.`);
   if (title.length < 3) return fail("The title needs a few more words.");
   if (body.length === 0) return fail("Write a message (or at least attach something and say what it is).");
   if (!(await rateLimit(c.env.DB, `post:${user.id}`, 20, 3600))) return fail("You're posting very fast. Please wait a while and try again.");

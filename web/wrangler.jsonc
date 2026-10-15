@@ -2,10 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "nodebox-forum",
   "main": "src/index.ts",
+  // The Sint Lucas account; wrangler can't pick it on its own when a login sees several accounts.
+  "account_id": "40728e030c0e1a608b66d84b0de7ac62",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": "public", "binding": "ASSETS" },
-  // Runs on the workers.dev URL until the forum.nodebox.net custom domain is added (after the first deploy).
+  // forum.nodebox.net needs the nodebox.net zone in this account and no other DNS record for that name.
+  "routes": [{ "pattern": "forum.nodebox.net", "custom_domain": true }],
   "workers_dev": true,
   "observability": { "enabled": true },
   "d1_databases": [

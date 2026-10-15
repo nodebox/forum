@@ -59,6 +59,12 @@ requests; it holds no Cloudflare credentials.
 everyone can read and sign in, only admins can post, and every page says so.
 At the switch, do the final import first, then remove `READ_ONLY` and push.
 
+## Deploying by hand
+
+When Workers Builds can't run, `npm run deploy` does the same as a build: it
+applies the D1 migrations, then deploys. Code that expects a migration fails on
+every page until that migration has run.
+
 ## Rolling back
 
 - Code: `npx wrangler rollback` (or pick a version under Workers → Deployments).

@@ -646,10 +646,15 @@ app.route("/admin", admin);
 
 // --- Fallbacks ----------------------------------------------------------------
 
+/**
+ * The topic an old Tender path points to. The import stored Tender's API paths
+ * (`/discussions/<category>/<id>`); shared links carry a slug after the id.
+ */
 function legacyTopic(db: D1Database, pathname: string): Promise<{ id: number; slug: string } | null> {
+  const path = pathname.replace(/\/$/, "");
   return db
-    .prepare("SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id WHERE r.path = ?")
-    .bind(pathname.replace(/\/$/, ""))
+    .prepare("SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id WHERE r.path IN (?, ?) LIMIT 1")
+    .bind(path, path.replace(/\/(\d+)-[^/]*$/, "/$1"))
     .first<{ id: number; slug: string }>();
 }
 

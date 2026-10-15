@@ -169,6 +169,11 @@ test("legacy URLs redirect", async () => {
   assert.equal(res.status, 301);
   assert.equal(res.headers.get("location"), "/t/4711/old");
 
+  await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at) VALUES (15388, 1, 900, 'Big news', 'big-news', '2010', '2010')").run();
+  await env.DB.prepare("INSERT INTO legacy_redirects (path, topic_id) VALUES ('/discussions/general-discussion/15388', 15388)").run();
+  const slugged = await req("/discussions/general-discussion/15388-big-news-nodebox-310");
+  assert.equal(slugged.headers.get("location"), "/t/15388/big-news", "shared links carry a slug the import didn't store");
+
   const old = (p: string) => app.request("https://support.example" + p, { redirect: "manual" }, { ...env, LEGACY_HOST: "support.example" });
   const moved = await old("/discussions/problems/4711-old");
   assert.equal(moved.status, 301);

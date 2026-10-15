@@ -49,7 +49,6 @@ export interface YourThread {
   category_slug: string;
   pinned: number;
   locked: number;
-  solved: number;
 }
 
 /** Topics someone started, replied to or watches, newest activity first, with unread counts. */
@@ -57,7 +56,7 @@ export async function yourThreads(db: D1Database, userId: number, limit = 100): 
   const { results } = await db
     .prepare(
       `SELECT t.id, t.title, t.slug, t.last_post_at, t.post_count, coalesce(tu.watching, 0) AS watching,
-              t.user_id = ?1 AS started, t.category_id, t.pinned, t.locked, t.solved, c.name AS category_name, c.slug AS category_slug,
+              t.user_id = ?1 AS started, t.category_id, t.pinned, t.locked, c.name AS category_name, c.slug AS category_slug,
               (SELECT count(*) FROM posts p WHERE p.topic_id = t.id AND p.status = 'visible' AND p.user_id <> ?1
                  AND p.created_at > coalesce(tu.last_seen_at, '')) AS new_posts
        FROM topics t

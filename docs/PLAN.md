@@ -65,7 +65,7 @@ Mapping:
 | Tender                         | Forum                                   |
 | ------------------------------ | --------------------------------------- |
 | categories                     | categories (slug from `permalink`)      |
-| discussions (open/assigned/resolved, public) | topics (Tender's `resolved` is kept in `topics.solved` but not shown) |
+| discussions (open/assigned/resolved, public) | topics (Tender's `resolved` is not carried over) |
 | comments (not `internal`, not `system_message`) | posts; comment 1 is the opening post |
 | users                          | users, deduplicated on lowercased email |
 | authors without a user row     | placeholder users with no email (cannot sign in) |

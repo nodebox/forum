@@ -8,9 +8,8 @@
 // The output expects an empty, freshly migrated database: the plan is to import
 // once more into a new database at cutover, before the forum opens.
 //
-// What comes over: public categories; open/assigned/resolved public discussions
-// (resolved becomes "solved"); comments that aren't internal notes or system
-// messages; the users who wrote at least one visible post (deduplicated on
+// What comes over: public categories; open/assigned/resolved public discussions;
+// comments that aren't internal notes or system messages; the users who wrote at least one visible post (deduplicated on
 // email); attachment metadata (files are uploaded separately); old URLs for
 // redirects.
 // Items the spam filter flagged (the `spam_excluded` view, if present) are
@@ -282,7 +281,6 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
         last_post_at: last?.at ?? created,
         last_post_user_id: last?.user ?? authorId,
         post_count: visible,
-        solved: d.state === "resolved" ? 1 : 0,
         status: topicStatus,
         tender_id: d.id,
       }),

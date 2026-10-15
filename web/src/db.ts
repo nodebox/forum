@@ -36,7 +36,6 @@ export interface TopicRow {
   post_count: number;
   pinned: number;
   locked: number;
-  solved: number;
   tender_id: number | null;
   status: PostStatus;
   author_name: string;

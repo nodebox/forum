@@ -82,11 +82,11 @@ test("converts a Tender export into forum rows", () => {
 
   assert.deepEqual(db.prepare("SELECT id, slug, topic_count FROM categories").all().map((r) => ({ ...r })), [{ id: 10, slug: "problems", topic_count: 2 }]);
 
-  const topics = db.prepare("SELECT id, title, solved, status, post_count FROM topics ORDER BY id").all().map((r) => ({ ...r }));
+  const topics = db.prepare("SELECT id, title, status, post_count FROM topics ORDER BY id").all().map((r) => ({ ...r }));
   assert.deepEqual(topics, [
-    { id: 100, title: "Crash on import", solved: 1, status: "visible", post_count: 4 },
-    { id: 101, title: "Pakketmelding", solved: 0, status: "spam", post_count: 0 },
-    { id: 105, title: "Opening comment gone", solved: 0, status: "visible", post_count: 1 },
+    { id: 100, title: "Crash on import", status: "visible", post_count: 4 },
+    { id: 101, title: "Pakketmelding", status: "spam", post_count: 0 },
+    { id: 105, title: "Opening comment gone", status: "visible", post_count: 1 },
   ]);
 
   const posts = db.prepare("SELECT topic_id, tender_number, status, body FROM posts ORDER BY id").all() as any[];

@@ -72,8 +72,8 @@ Worker: an old topic link goes to its new topic, anything else to the front
 page (`LEGACY_HOST` in `wrangler.jsonc`).
 
 1. Pin a notice on Tender: the forum has moved, and Tender closes on a set date.
-2. On that date, export Tender again, empty the forum's tables and run the
-   import once more. Read-only mode means only admins' test posts are lost.
+2. On that date, export Tender again, regenerate `import.sql` with
+   `npm run import:tender`, empty the forum's tables and run the import once more. Read-only mode means only admins' test posts are lost.
    Then remove `READ_ONLY`.
 3. Delete the `support.nodebox.net` record that points to Tender, then add
    `{ "pattern": "support.nodebox.net", "custom_domain": true }` to `routes`.

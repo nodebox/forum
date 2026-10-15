@@ -168,6 +168,12 @@ test("legacy URLs redirect", async () => {
   const res = await req("/discussions/problems/4711-old/");
   assert.equal(res.status, 301);
   assert.equal(res.headers.get("location"), "/t/4711/old");
+
+  const old = (p: string) => app.request("https://support.example" + p, { redirect: "manual" }, { ...env, LEGACY_HOST: "support.example" });
+  const moved = await old("/discussions/problems/4711-old");
+  assert.equal(moved.status, 301);
+  assert.equal(moved.headers.get("location"), "http://localhost/t/4711/old");
+  assert.equal((await old("/kb/anything")).headers.get("location"), "http://localhost/");
 });
 
 test("watching, grouped digests, hearts, your topics", async () => {

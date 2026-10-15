@@ -8,6 +8,8 @@ export interface Bindings {
   EMAIL: SendEmail;
   SITE_NAME: string;
   PUBLIC_URL: string;
+  /** The old Tender forum's hostname; requests to it redirect into the forum. */
+  LEGACY_HOST?: string;
   CF_IMAGES_PREFIX: string;
   CF_IMAGES_VARIANT_POST: string;
   CF_IMAGES_VARIANT_THUMB: string;

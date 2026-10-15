@@ -65,6 +65,19 @@ When Workers Builds can't run, `npm run deploy` does the same as a build: it
 applies the D1 migrations, then deploys. Code that expects a migration fails on
 every page until that migration has run.
 
+## Moving over from Tender
+
+`support.nodebox.net` (Tender) redirects into the forum once it points at the
+Worker: an old topic link goes to its new topic, anything else to the front
+page (`LEGACY_HOST` in `wrangler.jsonc`).
+
+1. Pin a notice on Tender: the forum has moved, and Tender closes on a set date.
+2. On that date, export Tender again, empty the forum's tables and run the
+   import once more. Read-only mode means only admins' test posts are lost.
+   Then remove `READ_ONLY`.
+3. Delete the `support.nodebox.net` record that points to Tender, then add
+   `{ "pattern": "support.nodebox.net", "custom_domain": true }` to `routes`.
+
 ## Rolling back
 
 - Code: `npx wrangler rollback` (or pick a version under Workers → Deployments).

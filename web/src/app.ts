@@ -73,6 +73,15 @@ const BANNER_COOKIE = "nbf_banner";
 
 export const app = new Hono<AppEnv>();
 
+// The old Tender forum's hostname, once pointed here: old topic links go to
+// their new topic, everything else to the front page.
+app.use(async (c, next) => {
+  const url = new URL(c.req.url);
+  if (!c.env.LEGACY_HOST || url.hostname !== c.env.LEGACY_HOST) return next();
+  const base = c.env.PUBLIC_URL.replace(/\/$/, "");
+  const legacy = await legacyTopic(c.env.DB, url.pathname);
+  return c.redirect(base + (legacy ? topicUrl(legacy) : "/"), 301);
+});
 app.use(secureHeaders({ crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false }));
 // Rejects cross-site form posts by checking the Origin header; with SameSite=Lax
 // session cookies this is the CSRF protection.
@@ -637,14 +646,16 @@ app.route("/admin", admin);
 
 // --- Fallbacks ----------------------------------------------------------------
 
+function legacyTopic(db: D1Database, pathname: string): Promise<{ id: number; slug: string } | null> {
+  return db
+    .prepare("SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id WHERE r.path = ?")
+    .bind(pathname.replace(/\/$/, ""))
+    .first<{ id: number; slug: string }>();
+}
+
 app.notFound(async (c) => {
   // Old Tender links: /discussions/<category>/<id>-<slug> and friends.
-  const path = new URL(c.req.url).pathname.replace(/\/$/, "");
-  const legacy = await c.env.DB.prepare(
-    "SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id WHERE r.path = ?",
-  )
-    .bind(path)
-    .first<{ id: number; slug: string }>();
+  const legacy = await legacyTopic(c.env.DB, new URL(c.req.url).pathname);
   if (legacy) return c.redirect(topicUrl(legacy), 301);
   return page(c, messagePage("Not found", "That page doesn't exist, or it moved.", { href: "/", label: "Go to the forum" }), {
     title: "Not found",

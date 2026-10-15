@@ -259,28 +259,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .topic { display: grid; grid-template-columns: subgrid; align-items: start; }
 .topic > * { grid-column: 1 / 8; }
-/* Topic head: category, title, then who started it and the actions on one row,
-   closed by a strong rule so the first post starts clearly below it. */
-.topic-head { display: grid; grid-template-columns: subgrid; padding-bottom: 24px; border-bottom: 2px solid var(--rule-strong); }
+/* The header is the title and what's known about the thread, on column 1. Who started it is the
+   first post's job, so the header has no avatar or name and doesn't read as a post of its own. */
+.topic-head { display: grid; grid-template-columns: subgrid; padding-bottom: 32px; }
 .topic-head > * { grid-column: 1 / -1; }
 .topic-head .kicker { margin-bottom: 12px; }
 .topic-head h1 { font-weight: 760; letter-spacing: -0.02em; }
-/* Avatar on column 1, name and actions on column 2: the same edges as the posts below. */
-.topic-byline { display: grid; grid-template-columns: subgrid; align-items: center; row-gap: 24px; margin-top: 24px; }
-.topic-starter { display: contents; }
-.topic-starter .avatar { grid-column: 1; }
-.topic-starter p { grid-column: 2 / -1; display: grid; min-width: 0; }
-.topic-actions { grid-column: 2 / -1; }
-.topic-head > .mod-bar { grid-column: 2 / -1; }
-.topic-starter strong { color: var(--ink); }
-.topic-facts { display: flex; flex-wrap: wrap; font-size: 15px; line-height: 24px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.topic-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; margin-top: 16px; }
 /* Every fact starts with a dot; the first dot of each line sits in the clipped margin, so a wrapped line never starts with one. */
-.topic-facts { margin-left: -20px; clip-path: inset(0 0 0 20px); }
+.topic-facts { display: flex; flex-wrap: wrap; margin: 0 0 0 -20px; clip-path: inset(0 0 0 20px); font-size: 16px; line-height: 24px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .topic-facts > *::before { content: "·"; display: inline-block; width: 20px; text-align: center; }
 .topic-facts .label { font-weight: 400; color: var(--ink-3); }
 .topic-actions { display: flex; flex-wrap: nowrap; gap: 8px; }
 .topic-actions:empty { display: none; }
-.topic-head + .posts > .post:first-child { border-top: 0; }
 .watch.on { border-color: var(--rule-strong); }
 .watch.on .icon { color: var(--accent); }
 .mod-bar { margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
@@ -461,9 +452,8 @@ article.prose > h1 { margin-bottom: 24px; }
   .stat-replies strong { font-size: inherit; line-height: inherit; }
   .stat-replies.none { line-height: inherit; }
   .topic-item-excerpt { -webkit-line-clamp: 2; }
-  .topic-head, .topic-byline { display: block; }
-  .topic-starter { display: flex; align-items: center; gap: 12px; }
-  .topic-actions { width: 100%; margin-top: 24px; }
+  .topic-head { display: block; }
+  .topic-actions { width: 100%; }
   .topic-actions .button, .topic-actions .watch-form { flex: 1; }
   .topic-actions .watch-form .button { width: 100%; }
   .post, .reply { padding: 24px 0; }

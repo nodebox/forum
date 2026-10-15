@@ -236,16 +236,13 @@ export function topicPage(
         ? html`<span class="tag" title="This topic was moved here from the old forum">From the old forum</span>`
         : ""}</p>
       <h1>${topic.title}</h1>
-      <div class="topic-byline">
-        <div class="topic-starter">
-          ${avatar({ id: topic.user_id, name: topic.author_name })}
-          <p><strong>${topic.author_name}</strong><span class="topic-facts">
-            <span>Started ${time(topic.created_at)}</span>
-            <span>${replies === 0 ? "No replies yet" : replies === 1 ? "1 reply" : `${replies} replies`}</span>
-            ${replies > 0 ? html`<span>Last reply ${time(topic.last_post_at)}</span>` : ""}
-            ${statusLabels(topic)}
-          </span></p>
-        </div>
+      <div class="topic-bar">
+        <p class="topic-facts">
+          ${opts.page > 1 ? html`<span>Started by ${topic.author_name} ${time(topic.created_at)}</span>` : ""}
+          <span>${replies === 0 ? "No replies yet" : replies === 1 ? "1 reply" : `${replies} replies`}</span>
+          ${replies > 0 ? html`<span>Last reply ${time(topic.last_post_at)}</span>` : ""}
+          ${statusLabels(topic)}
+        </p>
         <div class="topic-actions">
           ${canReply ? html`<a class="button button-primary" href="${user ? "#reply" : signInToReply}">${icon("reply", { size: 16 })}Reply</a>` : ""}
           ${user ? watchForm(topic, opts.watching) : ""}

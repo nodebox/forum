@@ -15,13 +15,13 @@ INSERT INTO users (id, email, name, is_admin, created_at, tender_id) VALUES
  (4, 'kenji@example.com', 'Kenji Watanabe', 0, '2026-09-20T00:00:00Z', NULL),
  (5, NULL, 'pakket-melding', 0, '2025-01-01T00:00:00Z', 999);
 
-INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at, last_post_user_id, post_count, pinned, solved, status, tender_id) VALUES
- (1, 1, 3, 'How do I make a grid of circles follow a CSV column?', 'how-do-i-make-a-grid-of-circles-follow-a-csv-column', '2026-10-11T09:12:00Z', '2026-10-12T08:40:00Z', 1, 3, 0, 1, 'visible', NULL),
- (2, 2, 4, 'Generative posters for a jazz festival', 'generative-posters-for-a-jazz-festival', '2026-10-10T14:00:00Z', '2026-10-12T11:05:00Z', 2, 2, 0, 0, 'visible', NULL),
- (3, 1, 2, 'Welcome to the new forum: read this first', 'welcome-to-the-new-forum-read-this-first', '2026-10-01T10:00:00Z', '2026-10-01T10:00:00Z', 2, 1, 1, 0, 'visible', NULL),
- (4, 3, 2, 'Import SVG crashes on files with gradients', 'import-svg-crashes-on-files-with-gradients', '2014-05-02T10:00:00Z', '2014-05-03T12:00:00Z', 1, 2, 0, 1, 'visible', 4711),
- (6, 5, 4, 'Drawing a path along a Bézier curve with the Bezier library', 'drawing-a-path-along-a-bezier-curve', '2009-03-14T10:00:00Z', '2009-03-14T10:00:00Z', 4, 1, 0, 0, 'visible', 4700),
- (5, 1, 5, 'Pakketmelding: verlies uw levering niet!', 'pakketmelding-verlies-uw-levering-niet', '2025-02-01T10:00:00Z', '2025-02-01T10:00:00Z', 5, 0, 0, 0, 'spam', 4712);
+INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at, last_post_user_id, post_count, pinned, status, tender_id) VALUES
+ (1, 1, 3, 'How do I make a grid of circles follow a CSV column?', 'how-do-i-make-a-grid-of-circles-follow-a-csv-column', '2026-10-11T09:12:00Z', '2026-10-12T08:40:00Z', 1, 3, 0, 'visible', NULL),
+ (2, 2, 4, 'Generative posters for a jazz festival', 'generative-posters-for-a-jazz-festival', '2026-10-10T14:00:00Z', '2026-10-12T11:05:00Z', 2, 2, 0, 'visible', NULL),
+ (3, 1, 2, 'Welcome to the new forum: read this first', 'welcome-to-the-new-forum-read-this-first', '2026-10-01T10:00:00Z', '2026-10-01T10:00:00Z', 2, 1, 1, 'visible', NULL),
+ (4, 3, 2, 'Import SVG crashes on files with gradients', 'import-svg-crashes-on-files-with-gradients', '2014-05-02T10:00:00Z', '2014-05-03T12:00:00Z', 1, 2, 0, 'visible', 4711),
+ (6, 5, 4, 'Drawing a path along a Bézier curve with the Bezier library', 'drawing-a-path-along-a-bezier-curve', '2009-03-14T10:00:00Z', '2009-03-14T10:00:00Z', 4, 1, 0, 'visible', 4700),
+ (5, 1, 5, 'Pakketmelding: verlies uw levering niet!', 'pakketmelding-verlies-uw-levering-niet', '2025-02-01T10:00:00Z', '2025-02-01T10:00:00Z', 5, 0, 0, 'spam', 4712);
 
 INSERT INTO posts (id, topic_id, user_id, body, created_at, status, moderation_reason, tender_number) VALUES
  (1, 1, 3, 'I have a CSV with a `size` column and I want each circle in a 10×10 grid to take its radius from the matching row.
@@ -43,8 +43,7 @@ Happy to share the project if anyone wants to dig in.', '2026-10-10T14:00:00Z', 
  (6, 3, 2, 'This forum replaces the old one. Your old account and posts came along: sign in with the same email address and they''re yours.
 
 - Attach your `.ndbx` project or a ZIP of the project folder when you ask a question.
-- Paste screenshots straight into the message box.
-- Mark your topic **solved** when you have an answer.', '2026-10-01T10:00:00Z', 'visible', NULL, NULL),
+- Paste screenshots straight into the message box.', '2026-10-01T10:00:00Z', 'visible', NULL, NULL),
  (7, 4, 2, 'When I import an SVG that has a linear gradient, NodeBox 3.0.40 crashes with a NullPointerException.', '2014-05-02T10:00:00Z', 'visible', NULL, 1),
  (8, 4, 1, 'Fixed in 3.0.41. Gradients are now ignored on import instead of crashing.', '2014-05-03T12:00:00Z', 'visible', NULL, 2),
  (10, 6, 4, 'How do I make every point of a path follow a Bézier curve in NodeBox 1? I can draw the curve but not walk along it.', '2009-03-14T10:00:00Z', 'visible', NULL, 1),

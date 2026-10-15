@@ -53,6 +53,12 @@ requests; it holds no Cloudflare credentials.
 6. Check: a sign-in email arrives, an upload works, a screenshot shows its
    resized variant, an old Tender URL redirects.
 
+## Read-only until the move
+
+`READ_ONLY` in `wrangler.jsonc` is `"true"` while Tender is still the forum:
+everyone can read and sign in, only admins can post, and every page says so.
+At the switch, do the final import first, then remove `READ_ONLY` and push.
+
 ## Rolling back
 
 - Code: `npx wrangler rollback` (or pick a version under Workers → Deployments).

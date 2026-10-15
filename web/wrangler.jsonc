@@ -30,7 +30,9 @@
     "CF_IMAGES_VARIANT_THUMB": "thumb",
     // "cloudflare" sends real mail; "log" prints sign-in links to the console (development).
     "MAILER": "cloudflare",
-    "MAIL_FROM": "forum@nodebox.net"
+    "MAIL_FROM": "forum@nodebox.net",
+    // "true" until the move from Tender: everyone reads and signs in, only admins write. Remove it to open the forum.
+    "READ_ONLY": "true"
   }
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET

@@ -16,7 +16,7 @@ let env: any;
 
 before(async () => {
   proxy = await getPlatformProxy({ persist: { path: persist } });
-  env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost" };
+  env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost", READ_ONLY: "false" };
   // A developer's .env may hold a real key; the tests only ever talk to the stand-in below.
   delete env.ANTHROPIC_API_KEY;
   const dir = path.join(import.meta.dirname, "../migrations");
@@ -336,4 +336,24 @@ test("the spam filter refuses spam from new accounts", async () => {
     delete env.ANTHROPIC_API_KEY;
     api.restore();
   }
+});
+
+test("read-only: everyone can read and sign in, only admins can write", async () => {
+  const ro = { ...env, READ_ONLY: "true" };
+  const roReq = (p: string, init: RequestInit & { cookie?: string } = {}) => {
+    const headers = new Headers(init.headers);
+    if (init.cookie) headers.set("cookie", init.cookie);
+    if (init.method === "POST") headers.set("origin", ORIGIN);
+    return app.request(ORIGIN + p, { ...init, headers, redirect: "manual" }, ro);
+  };
+  const cy = await signIn("cy@example.com");
+  const di = await signIn("di@example.com");
+  await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE email = 'di@example.com'").run();
+
+  assert.match(await (await roReq("/")).text(), /read-only/);
+  assert.equal((await roReq("/signin/email", { method: "POST", body: form({ email: "eve@example.com", next: "/" }) })).status, 200);
+  const refused = await roReq("/new", { method: "POST", cookie: cy, body: form({ title: "Hello", category: "questions", body: "Hi" }) });
+  assert.equal(refused.status, 403);
+  assert.match(await refused.text(), /read-only/);
+  assert.equal((await roReq("/new", { method: "POST", cookie: di, body: form({ title: "Admin test", category: "questions", body: "Hi" }) })).status, 302);
 });

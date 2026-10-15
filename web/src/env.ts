@@ -13,6 +13,8 @@ export interface Bindings {
   CF_IMAGES_VARIANT_THUMB: string;
   MAILER: string;
   MAIL_FROM: string;
+  /** "true" while the forum waits for the move from Tender: members can read and sign in, only admins can write. */
+  READ_ONLY?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   CF_ACCOUNT_ID?: string;

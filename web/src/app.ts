@@ -80,6 +80,13 @@ app.use(async (c, next) => {
   c.set("notice", null);
   await next();
 });
+// Before the move from Tender: reading and signing in work, writing is for admins only.
+const READ_ONLY_NOTICE = "The forum is read-only while we move it over from support.nodebox.net. Keep posting there until then.";
+app.use(async (c, next) => {
+  if (c.env.READ_ONLY !== "true" || c.req.method === "GET" || c.req.method === "HEAD" || c.get("user")?.is_admin) return next();
+  if (/^\/(signin|signout|unsubscribe)(\/|$)/.test(c.req.path)) return next();
+  return page(c, messagePage("Read-only for now", READ_ONLY_NOTICE, { href: "/", label: "Go to the forum" }), { title: "Read-only", status: 403, mainClass: "narrow" });
+});
 
 // The sidebar lists categories on every page; they rarely change, so each isolate keeps them for a minute.
 let categoryCache: { at: number; list: Category[] } | null = null;
@@ -98,7 +105,7 @@ async function page(c: Context<AppEnv>, content: Html, opts: { title?: string; d
         title: opts.title,
         description: opts.description,
         user: c.get("user"),
-        notice: c.get("notice") ?? noticeFromQuery(url),
+        notice: c.get("notice") ?? noticeFromQuery(url) ?? (c.env.READ_ONLY === "true" ? READ_ONLY_NOTICE : null),
         showBanner: getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
         path: url.pathname + url.search,
         siteName: c.env.SITE_NAME,

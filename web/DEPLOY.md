@@ -65,6 +65,10 @@ When Workers Builds can't run, `npm run deploy` does the same as a build: it
 applies the D1 migrations, then deploys. Code that expects a migration fails on
 every page until that migration has run.
 
+The footer shows the deployed commit only when the working tree is clean:
+with uncommitted changes there is no commit to link to. A bare
+`npx wrangler deploy` shows no version.
+
 ## Rolling back
 
 - Code: `npx wrangler rollback` (or pick a version under Workers → Deployments).

@@ -514,6 +514,16 @@ test("the light/dark choice is rendered from its cookie", async () => {
   assert.match(await (await req("/")).text(), /data-theme-toggle/);
 });
 
+test("the footer links the deployed commit", async () => {
+  const sha = "4872df9f0c3b5a1e2d7c6b8a9f0e1d2c3b4a5968";
+  assert.doesNotMatch(await (await req("/")).text(), /\/commit\//, "development: no commit");
+  const page = await (await app.request(ORIGIN + "/", {}, { ...env, GIT_COMMIT: sha })).text();
+  assert.match(page, new RegExp(`<a class="commit" href="https://github.com/nodebox/forum/commit/${sha}">4872df9</a>`));
+  assert.match(page, /href="https:\/\/algorithmicgaze.com\/"/);
+  const odd = await (await app.request(ORIGIN + "/", {}, { ...env, GIT_COMMIT: "none" })).text();
+  assert.doesNotMatch(odd, /\/commit\//);
+});
+
 test("pictures, video and sound show in the post", async () => {
   const bob = await signIn("media@example.com");
   // Uploaded video goes into the text, like a picture.

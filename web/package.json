@@ -14,7 +14,7 @@
     "deploy": "npm run build:client && npm run db:migrate:remote && wrangler deploy",
     "secrets": "sh scripts/put-secrets.sh",
     "ci:build": "npm run typecheck && npm test && npm run build:client",
-    "ci:deploy": "wrangler d1 migrations apply nodebox-forum --remote && wrangler deploy",
+    "ci:deploy": "wrangler d1 migrations apply nodebox-forum --remote && wrangler deploy --var GIT_COMMIT:${WORKERS_CI_COMMIT_SHA:-none}",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",

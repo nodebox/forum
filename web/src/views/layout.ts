@@ -5,6 +5,8 @@ import { icon } from "./icons.ts";
 
 export type Html = ReturnType<typeof html>;
 
+const SOURCE_URL = "https://github.com/nodebox/forum";
+
 export interface LayoutProps {
   title?: string;
   description?: string;
@@ -28,6 +30,8 @@ export interface LayoutProps {
   theme?: "light" | "dark" | null;
   /** RSS feeds offered to browsers and feed readers, this page's own first. */
   feeds?: { title: string; href: string }[];
+  /** Git commit this deploy was built from, shown in the footer. */
+  commit?: string | null;
 }
 
 /** The NodeBox Live mark (logo.svg from Frederik), drawn in the current text colour. */
@@ -150,7 +154,10 @@ export function layout(props: LayoutProps, content: Html): Html {
   </div>
   <footer class="site-footer">
     <div class="wrap grid">
-      <p>The NodeBox forum. Built by the <a href="https://www.emrg.be/">Experimental Media Research Group</a>.</p>
+      <p>The NodeBox forum. Built by <a href="https://algorithmicgaze.com/">the Algorithmic Gaze</a>, our research group.
+        The forum is <a href="${SOURCE_URL}">open source</a>${props.commit
+          ? html`; this is version <a class="commit" href="${SOURCE_URL}/commit/${props.commit}">${props.commit.slice(0, 7)}</a>`
+          : ""}.</p>
     </div>
   </footer>
 </body>

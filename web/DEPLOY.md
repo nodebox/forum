@@ -8,7 +8,7 @@ Worker's settings (Workers & Pages → nodebox-forum → Settings → Build):
 | Git repository | `nodebox/forum`, production branch `main` |
 | Root directory | `web` |
 | Build command | `npm run ci:build` (typecheck, tests, client bundle) |
-| Deploy command | `npm run ci:deploy` (D1 migrations, then `wrangler deploy`) |
+| Deploy command | `npm run ci:deploy` (D1 migrations, then `wrangler deploy`; passes the build's `WORKERS_CI_COMMIT_SHA` as `GIT_COMMIT` for the footer) |
 | Non-production branch builds | Off. Preview versions would use the production D1 database and R2 bucket |
 
 A failing test stops the build, so nothing is deployed. Migrations run before

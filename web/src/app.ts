@@ -137,6 +137,7 @@ async function page(
         query: opts.query,
         mainClass: opts.mainClass,
         theme: themeFromCookie(getCookie(c, THEME_COOKIE)),
+        commit: deployedCommit(c.env.GIT_COMMIT),
         feeds: [...(opts.feed ? [opts.feed] : []), ...siteFeeds(c.env.SITE_NAME).filter((f) => f.href !== opts.feed?.href)],
       },
       content,
@@ -157,6 +158,11 @@ const NOTICES: Record<string, string> = {
   welcome: "Welcome back! Your posts from the old forum are linked to your account.",
   saved: "Saved.",
 };
+/** The full commit hash Workers Builds deployed, or null in development. */
+export function deployedCommit(value: string | undefined): string | null {
+  return value && /^[0-9a-f]{40}$/.test(value) ? value : null;
+}
+
 function noticeFromQuery(url: URL): string | null {
   return NOTICES[url.searchParams.get("notice") ?? ""] ?? null;
 }

@@ -188,6 +188,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .site-footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; color: var(--ink-3); font-size: 15px; }
 .site-footer p { grid-column: 4 / -1; }
 .site-footer a { color: var(--ink-2); }
+.site-footer .commit { font-family: var(--mono); }
 
 /* Welcome note: in the content column, not a bar above the logo. */
 .welcome { display: flex; align-items: flex-start; gap: 16px; padding: 16px 16px 16px 24px; margin-bottom: 40px; background: var(--wash); box-shadow: inset 3px 0 0 var(--accent); color: var(--ink-2); }

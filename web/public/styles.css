@@ -67,6 +67,26 @@
     color-scheme: dark;
   }
 }
+/* Picked with the sun/moon button in the header; the device setting otherwise. */
+:root[data-theme="dark"] {
+  --blue: #8fbcef;
+  --heart: #e58a80;
+  --accent: #c98a5a;
+  --ink: #e8eef6;
+  --ink-2: #b6c4d5;
+  --ink-3: #93a3b8;
+  --rule: #1f3a5a;
+  --rule-strong: #e8eef6;
+  --wash: #0a2441;
+  --paper: #041a32;
+  --field: #061f3b;
+  --button: #e8eef6;
+  --button-hover: #8fbcef;
+  --danger: #ff8a8a;
+  --success: #6fd6a0;
+  --code-bg: #020f1f;
+  color-scheme: dark;
+}
 
 :root {
   --gap: 24px;
@@ -124,6 +144,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .header-nav { grid-column: 10 / -1; justify-self: end; display: flex; align-items: center; gap: 8px; }
 .header-icon { color: #c9d5e3; width: 40px; height: 40px; }
 .header-icon:hover { color: #fff; background: rgb(255 255 255 / 8%); }
+/* The theme button shows the moon in light mode and the sun in dark mode: what a click switches to. */
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun { display: block; }
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon { display: none; }
+}
 .icon-button.nav-toggle { display: none; color: #fff; margin-left: -8px; }
 
 .user-menu { position: relative; }
@@ -210,6 +238,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .avatar-md { width: 40px; height: 40px; font-size: 15px; }
 .avatar-sm { width: 28px; height: 28px; font-size: 12px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .avatar { background: hsl(var(--hue) 25% 26%); color: #e8eef6; } }
+:root[data-theme="dark"] .avatar { background: hsl(var(--hue) 25% 26%); color: #e8eef6; }
 
 .cat { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink-2); text-decoration: none; }
 .cat:hover { color: var(--ink); text-decoration: underline; }
@@ -313,6 +342,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .prose pre { font-family: var(--mono); background: var(--code-bg); color: var(--code-ink); padding: 16px 20px; overflow-x: auto; font-size: 15px; line-height: 24px; border-radius: var(--radius); }
 .prose pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .prose pre { border: 1px solid var(--rule); } }
+:root[data-theme="dark"] .prose pre { border: 1px solid var(--rule); }
 .prose img { border: 1px solid var(--rule); border-radius: var(--radius); }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 24px 0; }
 .prose table { border-collapse: collapse; }
@@ -436,12 +466,18 @@ article.prose > h1 { margin-bottom: 24px; }
   .nav-open .sidebar { display: block; position: fixed; z-index: 25; top: 0; left: 0; bottom: 0; width: 288px; overflow-y: auto; padding: 24px; background: var(--paper); border-right: 1px solid var(--rule); box-shadow: 0 0 0 100vmax rgb(4 26 50 / 40%); }
 }
 
+@media (max-width: 400px) {
+  /* Room for the theme button next to "Sign in" on small phones. */
+  .brand-sub { display: none; }
+}
 @media (max-width: 720px) {
   :root { --pad: 16px; --gap: 16px; --header: 64px; }
   .header-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 8px; padding-block: 12px; }
   .header-brand, .header-nav { grid-column: auto; }
   .search { grid-column: 1 / -1; grid-row: 2; }
   .brand-word, .brand-sub { font-size: 20px; }
+  .header-nav { gap: 4px; }
+  .theme-toggle { width: 32px; }
   .shell { padding-top: 24px; }
   .main, .main-head, .topic, .posts, .topic-foot, .topics { display: block; }
   .main-head-action { margin-top: 16px; justify-self: start; }

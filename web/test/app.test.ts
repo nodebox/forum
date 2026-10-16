@@ -505,3 +505,11 @@ test("RSS feeds", async () => {
   assert.match(await (await req("/c/feeds-cat")).text(), /<link rel="alternate" type="application\/rss\+xml" title="Feeds &amp; Things: new topics" href="\/feeds\/c\/feeds-cat">/);
   assert.match(await (await req("/feeds")).text(), /\/feeds\/c\/feeds-cat\/posts/);
 });
+
+test("the light/dark choice is rendered from its cookie", async () => {
+  assert.match(await (await req("/")).text(), /<html lang="en">/, "no cookie: the device decides");
+  assert.match(await (await req("/", { cookie: "nbf_theme=dark" })).text(), /<html lang="en" data-theme="dark">/);
+  assert.match(await (await req("/", { cookie: "nbf_theme=light" })).text(), /<html lang="en" data-theme="light">/);
+  assert.match(await (await req("/", { cookie: 'nbf_theme="><script>' })).text(), /<html lang="en">/);
+  assert.match(await (await req("/")).text(), /data-theme-toggle/);
+});

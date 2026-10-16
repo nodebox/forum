@@ -72,6 +72,9 @@ import {
 const TOPICS_PER_PAGE = 30;
 const POSTS_PER_PAGE = 40;
 const BANNER_COOKIE = "nbf_banner";
+/** Set by the sun/moon button (client/app.ts); without it the device's setting decides. */
+const THEME_COOKIE = "nbf_theme";
+const themeFromCookie = (v: string | undefined) => (v === "light" || v === "dark" ? v : null);
 
 export const app = new Hono<AppEnv>();
 
@@ -133,6 +136,7 @@ async function page(
         unanswered,
         query: opts.query,
         mainClass: opts.mainClass,
+        theme: themeFromCookie(getCookie(c, THEME_COOKIE)),
         feeds: [...(opts.feed ? [opts.feed] : []), ...siteFeeds(c.env.SITE_NAME).filter((f) => f.href !== opts.feed?.href)],
       },
       content,

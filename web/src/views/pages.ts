@@ -2,7 +2,7 @@ import { html, raw } from "hono/html";
 import { REACTIONS, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
 import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
-import { excerpt } from "../markdown.ts";
+import { excerpt, mediaPlayer } from "../markdown.ts";
 import { avatar, categoryBadge, type Html } from "./layout.ts";
 import { icon } from "./icons.ts";
 import { postModMenu, topicModBar } from "./admin.ts";
@@ -181,7 +181,9 @@ export interface RenderedPost {
   /** Attachments not shown inline in the body. */
   files: Attachment[];
   /** Images not referenced in the body (shown as a gallery). */
-  images: { a: Attachment; thumb: string; full: string }[];
+  images: { a: Attachment; src: string; thumb: string; full: string }[];
+  /** Video and sound not referenced in the body (shown as players). */
+  media: { a: Attachment; kind: "video" | "audio"; url: string }[];
   reactions: ReactionSummary[];
 }
 
@@ -209,6 +211,47 @@ function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | n
     })}
     <button type="button" class="action react-toggle" title="Add a reaction">${icon("smile-plus", { size: 18 })}<span>React</span></button>
   </form>`;
+}
+
+/**
+ * Pictures attached to a post but not placed in its text. One picture shows at
+ * reading size; several show as a grid of thumbnails. Each opens in the
+ * lightbox (client/app.ts), or in a new tab without script.
+ */
+function gallery(images: RenderedPost["images"]): Html | string {
+  if (images.length === 0) return "";
+  const one = images.length === 1;
+  return html`<ul class="gallery${one ? " gallery-one" : ""}">${images.map(({ a, src, thumb, full }) => {
+    const dims = one && a.width && a.height ? raw(` width="${a.width}" height="${a.height}"`) : "";
+    return html`<li><a href="${full}" target="_blank" rel="noopener" data-lightbox data-caption="${a.filename}">
+      <img src="${one ? src : thumb}" alt="${a.filename}" loading="lazy" decoding="async"${dims}></a></li>`;
+  })}</ul>`;
+}
+
+/** The picture viewer, opened by client/app.ts on any [data-lightbox] link. Esc, the arrow keys and swipes work. */
+function lightbox(): Html {
+  return html`<dialog class="lightbox" data-lightbox-dialog aria-label="Picture">
+    <figure class="lightbox-stage" data-lightbox-stage>
+      <img alt="" data-lightbox-img>
+      <figcaption>
+        <span class="lightbox-caption" data-lightbox-caption></span>
+        <span class="lightbox-count" data-lightbox-count></span>
+        <a class="lightbox-open" href="#" target="_blank" rel="noopener" data-lightbox-open>${icon("external-link", { size: 18 })}<span>Original</span></a>
+      </figcaption>
+    </figure>
+    <button type="button" class="lightbox-button lightbox-prev" data-lightbox-prev aria-label="Previous picture">${icon("chevron-left", { size: 28 })}</button>
+    <button type="button" class="lightbox-button lightbox-next" data-lightbox-next aria-label="Next picture">${icon("chevron-right", { size: 28 })}</button>
+    <button type="button" class="lightbox-button lightbox-close" data-lightbox-close aria-label="Close">${icon("x", { size: 24 })}</button>
+  </dialog>`;
+}
+
+/** A video or sound attachment: the player, then its name and a download link. */
+function mediaItem(m: RenderedPost["media"][number]): Html {
+  return html`<figure class="media media-${m.kind}">
+    ${raw(mediaPlayer(m.kind, m.url, m.a.filename))}
+    <figcaption><span class="file-name">${m.a.filename}</span><span class="file-meta">${formatBytes(m.a.size)}</span>
+      <a class="action" href="${m.url}" download>${icon("download", { size: 18 })}<span>Download</span></a></figcaption>
+  </figure>`;
 }
 
 function fileCard(a: Attachment): Html {
@@ -267,9 +310,8 @@ export function topicPage(
               <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
             </header>
             <div class="prose" data-post-body data-author="${p.post.author_name}">${raw(p.html)}</div>
-            ${p.images.length
-              ? html`<ul class="gallery">${p.images.map((img) => html`<li><a href="${img.full}" target="_blank" rel="noopener"><img src="${img.thumb}" alt="${img.a.filename}" loading="lazy"></a></li>`)}</ul>`
-              : ""}
+            ${gallery(p.images)}
+            ${p.media.map(mediaItem)}
             ${p.files.length ? html`<ul class="files">${p.files.map(fileCard)}</ul>` : ""}
             <footer class="post-actions">
               ${p.post.status === "visible"
@@ -283,6 +325,8 @@ export function topicPage(
         </li>`,
       )}
     </ol>
+
+    ${lightbox()}
 
     <div class="topic-foot">
       ${pager(topicUrl(topic), opts.page, opts.hasMore)}

@@ -1,5 +1,5 @@
 // The forum's only script: the light/dark switch, dismissing the banner, the composer (drag and drop,
-// paste, preview) and live reactions. Everything else is plain HTML forms.
+// paste, preview), live reactions and the picture lightbox. Everything else is plain HTML forms.
 
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel);
 const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)];
@@ -288,3 +288,91 @@ document.addEventListener("click", (e) => {
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
   textarea.scrollIntoView({ block: "center" });
 });
+
+// --- Lightbox -----------------------------------------------------------------
+
+// Pictures in a post open over the page; the arrows (keys, buttons or a swipe)
+// go through that post's other pictures. Without script the links open the
+// original in a new tab.
+const box = $<HTMLDialogElement>("[data-lightbox-dialog]");
+if (box) setupLightbox(box);
+
+function setupLightbox(box: HTMLDialogElement) {
+  const img = $<HTMLImageElement>("[data-lightbox-img]", box)!;
+  const caption = $("[data-lightbox-caption]", box)!;
+  const count = $("[data-lightbox-count]", box)!;
+  const open = $<HTMLAnchorElement>("[data-lightbox-open]", box)!;
+  const prev = $<HTMLButtonElement>("[data-lightbox-prev]", box)!;
+  const next = $<HTMLButtonElement>("[data-lightbox-next]", box)!;
+  let links: HTMLAnchorElement[] = [];
+  let index = 0;
+  let opener: HTMLAnchorElement | null = null;
+
+  function show(i: number) {
+    index = (i + links.length) % links.length;
+    const link = links[index]!;
+    const preview = $<HTMLImageElement>("img", link);
+    // Show the picture already on the page at once, then swap in the original when it has loaded.
+    img.src = preview?.currentSrc || link.href;
+    img.alt = preview?.alt ?? "";
+    if (link.href !== img.src) {
+      const full = new Image();
+      full.onload = () => {
+        if (links[index] === link) img.src = full.src;
+      };
+      full.src = link.href;
+    }
+    caption.textContent = link.dataset.caption ?? preview?.alt ?? "";
+    count.textContent = links.length > 1 ? `${index + 1} of ${links.length}` : "";
+    open.href = link.href;
+    prev.hidden = next.hidden = links.length < 2;
+  }
+
+  document.addEventListener("click", (e) => {
+    const link = (e.target as Element).closest<HTMLAnchorElement>("a[data-lightbox]");
+    // Let modified clicks (new tab, download) through.
+    if (!link || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    const group = link.closest(".post-main, [data-preview]") ?? document;
+    links = $$<HTMLAnchorElement>("a[data-lightbox]", group);
+    opener = link;
+    show(links.indexOf(link));
+    box.showModal();
+    document.documentElement.classList.add("lightbox-on");
+    (links.length > 1 ? next : $<HTMLButtonElement>("[data-lightbox-close]", box)!).focus();
+  });
+
+  prev.addEventListener("click", () => show(index - 1));
+  next.addEventListener("click", () => show(index + 1));
+  $("[data-lightbox-close]", box)!.addEventListener("click", () => box.close());
+  // A click on the dark area around the picture closes, a click on the picture doesn't.
+  box.addEventListener("click", (e) => {
+    if (e.target === box || e.target === $("[data-lightbox-stage]", box)) box.close();
+  });
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") show(index - 1);
+    else if (e.key === "ArrowRight") show(index + 1);
+    else return;
+    e.preventDefault();
+  });
+  box.addEventListener("close", () => {
+    document.documentElement.classList.remove("lightbox-on");
+    img.removeAttribute("src");
+    opener?.focus({ preventScroll: true });
+  });
+
+  // Swipe sideways for the next or previous picture, down to close.
+  let start: { x: number; y: number } | null = null;
+  box.addEventListener("touchstart", (e) => {
+    start = e.touches.length === 1 ? { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY } : null;
+  }, { passive: true });
+  box.addEventListener("touchend", (e) => {
+    if (!start) return;
+    const t = e.changedTouches[0]!;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    start = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) && links.length > 1) show(index + (dx < 0 ? 1 : -1));
+    else if (dy > 80 && dy > Math.abs(dx)) box.close();
+  });
+}

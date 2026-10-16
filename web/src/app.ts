@@ -39,7 +39,7 @@ import {
   userForVerifiedEmail,
   type SignInResult,
 } from "./auth.ts";
-import { UploadError, fileUrl, imageUrls, isImage, settleAttachments, storeUpload } from "./files.ts";
+import { UploadError, fileUrl, imageUrls, isImage, parseRange, playable, settleAttachments, storeUpload } from "./files.ts";
 import { refusalReason, refusePost } from "./spamfilter.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
@@ -257,8 +257,12 @@ async function showTopic(c: Context<AppEnv>) {
     return {
       post,
       html: renderMarkdown(post.body, { attachments: byId, image }),
-      files: notInline.filter((a) => !isImage(a.content_type)),
+      files: notInline.filter((a) => !isImage(a.content_type) && !playable(a)),
       images: notInline.filter((a) => isImage(a.content_type)).map((a) => ({ a, ...imageUrls(c.env, a) })),
+      media: notInline.flatMap((a) => {
+        const m = playable(a);
+        return m ? [{ a, kind: m.kind, url: fileUrl(a) }] : [];
+      }),
       reactions: reactions.filter((r) => r.post_id === post.id),
     };
   });
@@ -577,6 +581,8 @@ app.post("/uploads", async (c) => {
     const a = await storeUpload(c.env, c.env.DB, user.id, file);
     const image = isImage(a.content_type);
     const url = fileUrl(a);
+    // Pictures, video and sound go into the text where the cursor is, so they show in the post.
+    const shown = image || playable(a);
     return c.json({
       id: a.id,
       filename: a.filename,
@@ -585,7 +591,7 @@ app.post("/uploads", async (c) => {
       isImage: image,
       url,
       thumb: image ? imageUrls(c.env, a).thumb : null,
-      markdown: image ? `![${a.filename.replace(/[[\]]/g, "")}](${url})` : null,
+      markdown: shown ? `![${a.filename.replace(/[[\]]/g, "")}](${url})` : null,
     });
   } catch (err) {
     if (err instanceof UploadError) return c.json({ error: err.message }, err.status);
@@ -596,20 +602,34 @@ app.post("/uploads", async (c) => {
 app.get("/files/:id/:name?", async (c) => {
   const a = await c.env.DB.prepare("SELECT * FROM attachments WHERE id = ?").bind(c.req.param("id")).first<Attachment>();
   if (!a) return c.notFound();
-  const obj = await c.env.FILES.get(a.r2_key);
+  // Video players (Safari above all) ask for byte ranges and won't play without them.
+  // The stored size can be missing for imported files, so ask R2 for the real one.
+  const asked = c.req.header("range");
+  const size = asked ? (await c.env.FILES.head(a.r2_key))?.size : undefined;
+  if (asked && size === undefined) return c.notFound();
+  const range = size === undefined ? null : parseRange(asked, size);
+  if (range === "unsatisfiable") return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${size}` } });
+  const obj = await c.env.FILES.get(a.r2_key, range ? { range } : undefined);
   if (!obj) return c.notFound();
+  const media = playable(a);
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
-  headers.set("Content-Type", a.content_type);
-  headers.set("Content-Length", String(obj.size));
+  headers.set("Content-Type", media?.type ?? a.content_type);
+  headers.set("Accept-Ranges", "bytes");
   headers.set("ETag", obj.httpEtag);
   headers.set("Cache-Control", "public, max-age=31536000, immutable");
   headers.set("X-Content-Type-Options", "nosniff");
   // Uploaded files are never allowed to run script on our origin.
-  headers.set("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
-  if (!isImage(a.content_type)) {
-    headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(a.filename)}`);
+  headers.set("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+  // Imported files carry the disposition they were uploaded with, so set it every time.
+  headers.set("Content-Disposition", `${isImage(a.content_type) || media ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(a.filename)}`);
+  if (range) {
+    const length = Math.min(range.length, obj.size - range.offset);
+    headers.set("Content-Range", `bytes ${range.offset}-${range.offset + length - 1}/${obj.size}`);
+    headers.set("Content-Length", String(length));
+    return new Response(obj.body, { status: 206, headers });
   }
+  headers.set("Content-Length", String(obj.size));
   return new Response(obj.body, { headers });
 });
 

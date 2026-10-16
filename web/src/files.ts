@@ -14,6 +14,31 @@ export function isImage(contentType: string): boolean {
   return IMAGE_TYPES.has(contentType);
 }
 
+/**
+ * Video and sound that browsers play in a post, by content type or extension
+ * (Tender stored some MP4s as application/mp4). The value is the type the file
+ * is served with, so the player accepts it: QuickTime movies go out as MP4,
+ * the same container, which Chrome and Firefox otherwise refuse to play.
+ */
+const PLAYABLE: Record<string, { kind: "video" | "audio"; type: string }> = {
+  mp4: { kind: "video", type: "video/mp4" },
+  m4v: { kind: "video", type: "video/mp4" },
+  mov: { kind: "video", type: "video/mp4" },
+  webm: { kind: "video", type: "video/webm" },
+  mp3: { kind: "audio", type: "audio/mpeg" },
+  m4a: { kind: "audio", type: "audio/mp4" },
+  wav: { kind: "audio", type: "audio/wav" },
+  ogg: { kind: "audio", type: "audio/ogg" },
+};
+const PLAYABLE_TYPES = new Set(["video/mp4", "application/mp4", "video/quicktime", "video/webm", "audio/mpeg", "audio/mp3", "audio/mp4", "audio/wav", "audio/x-wav", "audio/ogg"]);
+
+export function playable(a: Pick<Attachment, "filename" | "content_type">): { kind: "video" | "audio"; type: string } | null {
+  const ext = a.filename.toLowerCase().split(".").pop() ?? "";
+  const known = PLAYABLE[ext];
+  if (!known) return null;
+  return PLAYABLE_TYPES.has(a.content_type) || a.content_type === "application/octet-stream" ? known : null;
+}
+
 export function cleanFilename(name: string): string {
   const base = name.split(/[\\/]/).pop() ?? "file";
   const cleaned = base.replace(/[\x00-\x1f"<>|*?:]/g, "_").replace(/^\.+/, "").trim().slice(0, 140);
@@ -37,6 +62,14 @@ export function guessType(filename: string, given: string): string {
     json: "application/json",
     txt: "text/plain",
     pdf: "application/pdf",
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    ogg: "audio/ogg",
   };
   return (ext && map[ext]) || "application/octet-stream";
 }
@@ -208,9 +241,9 @@ export function fileUrl(a: Pick<Attachment, "id" | "filename">): string {
   return `/files/${a.id}/${encodeURIComponent(a.filename)}`;
 }
 
-/** Images open in the browser; everything else downloads. */
+/** Images, video and sound open in the browser; everything else downloads. */
 export function dispositionFor(filename: string, contentType: string): string {
-  const kind = isImage(contentType) ? "inline" : "attachment";
+  const kind = isImage(contentType) || playable({ filename, content_type: contentType }) ? "inline" : "attachment";
   const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "");
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
@@ -221,4 +254,19 @@ export function fileKind(a: Pick<Attachment, "filename" | "content_type">): "nod
   if (name.endsWith(".zip") || a.content_type === "application/zip") return "zip";
   if (isImage(a.content_type)) return "image";
   return "file";
+}
+
+/** One byte range from a Range header (`bytes=0-99`, `bytes=100-`, `bytes=-500`); several ranges get the whole file. */
+export function parseRange(header: string | undefined, size: number): { offset: number; length: number } | "unsatisfiable" | null {
+  const m = header && /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  if (m[1] === "") {
+    const suffix = Math.min(Number(m[2]), size);
+    return suffix === 0 ? "unsatisfiable" : { offset: size - suffix, length: suffix };
+  }
+  const start = Number(m[1]);
+  if (start >= size) return "unsatisfiable";
+  const end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  if (end < start) return null;
+  return { offset: start, length: end - start + 1 };
 }

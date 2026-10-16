@@ -513,3 +513,51 @@ test("the light/dark choice is rendered from its cookie", async () => {
   assert.match(await (await req("/", { cookie: 'nbf_theme="><script>' })).text(), /<html lang="en">/);
   assert.match(await (await req("/")).text(), /data-theme-toggle/);
 });
+
+test("pictures, video and sound show in the post", async () => {
+  const bob = await signIn("media@example.com");
+  // Uploaded video goes into the text, like a picture.
+  const fd = new FormData();
+  fd.append("file", new File([new Uint8Array(1000).fill(7)], "clip.mp4", { type: "video/mp4" }));
+  const clip = await (await req("/uploads", { method: "POST", cookie: bob, body: fd })).json() as any;
+  assert.equal(clip.markdown, `![clip.mp4](/files/${clip.id}/clip.mp4)`);
+  const shots: string[] = [];
+  for (const name of ["a.png", "b.png"]) {
+    const f = new FormData();
+    f.append("file", new File([new Uint8Array([137, 80, 78, 71])], name, { type: "image/png" }));
+    shots.push(((await (await req("/uploads", { method: "POST", cookie: bob, body: f })).json()) as any).id);
+  }
+  const body = new URLSearchParams();
+  for (const [k, v] of Object.entries({ title: "Moving pictures", category: "questions", body: `Look:\n\n${clip.markdown}` })) body.append(k, v);
+  for (const id of [clip.id, ...shots]) body.append("attachments", id);
+  const res = await req("/new", { method: "POST", cookie: bob, body });
+  const topicPath = res.headers.get("location")!;
+  const { post_id: postId, user_id: userId } = await env.DB.prepare("SELECT post_id, user_id FROM attachments WHERE id = ?").bind(clip.id).first();
+
+  // An imported Tender video: application/mp4, stored for download, not referenced in the text.
+  const tenderKey = `posts/${postId}/tendervid01/old.mp4`;
+  await env.FILES.put(tenderKey, new Uint8Array(500).fill(1), { httpMetadata: { contentType: "application/mp4", contentDisposition: "attachment" } });
+  await env.DB.prepare("INSERT INTO attachments (id, user_id, post_id, r2_key, filename, content_type, size, created_at) VALUES ('tendervid01', ?, ?, ?, 'old.mp4', 'application/mp4', 500, '2015-01-01')")
+    .bind(userId, postId, tenderKey).run();
+
+  const html = await (await req(topicPath)).text();
+  assert.match(html, new RegExp(`<video class="post-video" src="/files/${clip.id}/clip.mp4#t=0.1"`), "video in the text plays there");
+  assert.match(html, /<figure class="media media-video">\s*<video class="post-video" src="\/files\/tendervid01\/old.mp4#t=0.1"/, "attached video gets a player");
+  assert.doesNotMatch(html, /file-card[^>]*old\.mp4/, "not a download card");
+  assert.equal((html.match(/data-lightbox data-caption/g) ?? []).length, 2, "both pictures open in the lightbox");
+  assert.match(html, /<dialog class="lightbox"/);
+
+  // Players need byte ranges; imported files play inline whatever they were stored with.
+  const whole = await req("/files/tendervid01/old.mp4");
+  assert.equal(whole.status, 200);
+  assert.equal(whole.headers.get("accept-ranges"), "bytes");
+  assert.equal(whole.headers.get("content-type"), "video/mp4");
+  assert.match(whole.headers.get("content-disposition")!, /^inline/);
+  const part = await req("/files/tendervid01/old.mp4", { headers: { range: "bytes=100-199" } });
+  assert.equal(part.status, 206);
+  assert.equal(part.headers.get("content-range"), "bytes 100-199/500");
+  assert.equal((await part.arrayBuffer()).byteLength, 100);
+  const tail = await req("/files/tendervid01/old.mp4", { headers: { range: "bytes=-50" } });
+  assert.equal(tail.headers.get("content-range"), "bytes 450-499/500");
+  assert.equal((await req("/files/tendervid01/old.mp4", { headers: { range: "bytes=900-" } })).status, 416);
+});

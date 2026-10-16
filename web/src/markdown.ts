@@ -1,5 +1,6 @@
 import MarkdownIt from "markdown-it";
 import type { Attachment } from "./db.ts";
+import { playable } from "./files.ts";
 
 /** How an attachment is shown when a post refers to it by its `/files/<id>/...` URL. */
 export interface ImageResolver {
@@ -25,15 +26,29 @@ md.renderer.rules.image = (tokens, idx, _options, rawEnv, self) => {
   const alt = self.renderInlineAsText(token.children ?? [], _options, rawEnv);
   const id = FILE_URL.exec(src)?.[1];
   const attachment = id ? env.attachments?.get(id) : undefined;
+  const media = attachment && playable(attachment);
+  if (media) return mediaPlayer(media.kind, src, alt || attachment.filename);
   const resolved = attachment && env.image ? env.image(attachment) : null;
   const shown = resolved?.src ?? src;
   const full = resolved?.full ?? src;
   const dims = attachment?.width && attachment.height ? ` width="${attachment.width}" height="${attachment.height}"` : "";
   return (
-    `<a class="post-image" href="${esc(full)}" target="_blank" rel="noopener">` +
+    `<a class="post-image" href="${esc(full)}" target="_blank" rel="noopener" data-lightbox>` +
     `<img src="${esc(shown)}" alt="${esc(alt)}" loading="lazy" decoding="async"${dims}></a>`
   );
 };
+
+/**
+ * A video or sound attachment, played in the post. `#t=0.1` makes Safari show
+ * the first frame instead of a black box; the link inside is for browsers that
+ * can't play the file.
+ */
+export function mediaPlayer(kind: "video" | "audio", url: string, label: string): string {
+  const fallback = `<a href="${esc(url)}" download>${esc(label)}</a>`;
+  return kind === "video"
+    ? `<video class="post-video" src="${esc(url)}#t=0.1" controls playsinline preload="metadata" aria-label="${esc(label)}">${fallback}</video>`
+    : `<audio class="post-audio" src="${esc(url)}" controls preload="none" aria-label="${esc(label)}">${fallback}</audio>`;
+}
 
 const defaultLinkOpen = md.renderer.rules.link_open ?? ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
 md.renderer.rules.link_open = (tokens, idx, options, env, self) => {

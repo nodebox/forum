@@ -86,11 +86,12 @@ app.use(async (c, next) => {
   c.set("notice", null);
   await next();
 });
-// Before the move from Tender: reading and signing in work, writing is for admins only.
+// Before the move from Tender: reading, signing in and your own settings work; anything that
+// touches posts is for admins only, so the final import doesn't have to merge new content.
 const READ_ONLY_NOTICE = "The forum is read-only while we move it over from support.nodebox.net. Keep posting there until then.";
 app.use(async (c, next) => {
   if (c.env.READ_ONLY !== "true" || c.req.method === "GET" || c.req.method === "HEAD" || c.get("user")?.is_admin) return next();
-  if (/^\/(signin|signout|unsubscribe)(\/|$)/.test(c.req.path)) return next();
+  if (/^\/(signin|signout|unsubscribe|settings)(\/|$)/.test(c.req.path)) return next();
   return page(c, messagePage("Read-only for now", READ_ONLY_NOTICE, { href: "/", label: "Go to the forum" }), { title: "Read-only", status: 403, mainClass: "narrow" });
 });
 

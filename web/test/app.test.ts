@@ -417,6 +417,9 @@ test("read-only: everyone can read and sign in, only admins can write", async ()
 
   assert.match(await (await roReq("/")).text(), /read-only/);
   assert.equal((await roReq("/signin/email", { method: "POST", body: form({ email: "eve@example.com", next: "/" }) })).status, 200);
+  // The first-sign-in name form and settings save; they don't touch posts.
+  assert.equal((await roReq("/settings", { method: "POST", cookie: cy, body: form({ name: "Cy", next: "/" }) })).status, 302);
+  assert.equal((await env.DB.prepare("SELECT name FROM users WHERE email = 'cy@example.com'").first()).name, "Cy");
   const refused = await roReq("/new", { method: "POST", cookie: cy, body: form({ title: "Hello", category: "questions", body: "Hi" }) });
   assert.equal(refused.status, 403);
   assert.match(await refused.text(), /read-only/);

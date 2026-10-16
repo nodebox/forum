@@ -15,6 +15,8 @@ export interface Bindings {
   MAIL_FROM: string;
   /** Git commit of this deploy. Workers Builds passes it in (`npm run ci:deploy`); absent in development. */
   GIT_COMMIT?: string;
+  /** The old forum's domains (comma-separated). Requests on them redirect to the same page on PUBLIC_URL. */
+  LEGACY_HOSTS?: string;
   /** "true" while the forum waits for the move from Tender: members can read and sign in, only admins can write. */
   READ_ONLY?: string;
   GOOGLE_CLIENT_ID?: string;

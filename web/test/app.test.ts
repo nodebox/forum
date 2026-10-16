@@ -168,6 +168,17 @@ test("legacy URLs redirect", async () => {
   const res = await req("/discussions/problems/4711-old/");
   assert.equal(res.status, 301);
   assert.equal(res.headers.get("location"), "/t/4711/old");
+  // Moved or renamed since: the discussion number still finds it.
+  assert.equal((await req("/discussions/questions/4711-renamed")).headers.get("location"), "/t/4711/old");
+  assert.equal((await req("/discussions/problems/47110-other")).status, 404);
+  // The old domain, once it points here: everything moves to the same page on the forum.
+  const legacyEnv = { ...env, LEGACY_HOSTS: "support.nodebox.net" };
+  const old = (p: string) => app.request("https://support.nodebox.net" + p, {}, legacyEnv);
+  assert.equal((await old("/discussions/problems/4711-old")).headers.get("location"), "http://localhost/t/4711/old");
+  assert.equal((await old("/discussions/questions")).headers.get("location"), "http://localhost/c/questions");
+  assert.equal((await old("/search?q=svg")).headers.get("location"), "http://localhost/search?q=svg");
+  assert.equal((await old("/")).headers.get("location"), "http://localhost/");
+  assert.equal((await old("//evil.example/x")).headers.get("location"), "http://localhost//evil.example/x");
 });
 
 test("watching, grouped digests, hearts, your topics", async () => {

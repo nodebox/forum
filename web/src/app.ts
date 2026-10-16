@@ -3,6 +3,7 @@ import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
+import { parseHosts, resolveLegacyPath } from "./legacy.ts";
 import type { AppEnv } from "./env.ts";
 import {
   REACTIONS,
@@ -78,6 +79,15 @@ const themeFromCookie = (v: string | undefined) => (v === "light" || v === "dark
 
 export const app = new Hono<AppEnv>();
 
+// The old forum's own domain (support.nodebox.net), once it points at this Worker: every
+// request moves to the same page here, old discussion URLs to their topics.
+app.use(async (c, next) => {
+  const url = new URL(c.req.url);
+  if (!parseHosts(c.env.LEGACY_HOSTS).includes(url.hostname)) return next();
+  const target = (await resolveLegacyPath(c.env.DB, url.pathname)) ?? url.pathname + url.search;
+  // Concatenated, not resolved with new URL(): a path like //evil.example would leave the site.
+  return c.redirect(c.env.PUBLIC_URL.replace(/\/$/, "") + target, 301);
+});
 app.use(secureHeaders({ crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false }));
 // Rejects cross-site form posts by checking the Origin header; with SameSite=Lax
 // session cookies this is the CSRF protection.
@@ -845,14 +855,10 @@ app.route("/admin", admin);
 // --- Fallbacks ----------------------------------------------------------------
 
 app.notFound(async (c) => {
-  // Old Tender links: /discussions/<category>/<id>-<slug> and friends.
-  const path = new URL(c.req.url).pathname.replace(/\/$/, "");
-  const legacy = await c.env.DB.prepare(
-    "SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id WHERE r.path = ?",
-  )
-    .bind(path)
-    .first<{ id: number; slug: string }>();
-  if (legacy) return c.redirect(topicUrl(legacy), 301);
+  // Old Tender links: /discussions/<category>/<number>-<slug> and category pages.
+  const path = new URL(c.req.url).pathname;
+  const legacy = path.startsWith("/discussions") ? await resolveLegacyPath(c.env.DB, path) : null;
+  if (legacy) return c.redirect(legacy, 301);
   return page(c, messagePage("Not found", "That page doesn't exist, or it moved.", { href: "/", label: "Go to the forum" }), {
     title: "Not found",
     status: 404,

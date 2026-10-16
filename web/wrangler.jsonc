@@ -24,6 +24,9 @@
     // Absolute origin, used in sign-in emails and the Google redirect URI.
     // These are the production values; `npm run dev` overrides PUBLIC_URL and MAILER.
     "PUBLIC_URL": "https://forum.nodebox.net",
+    // The old Tender forum's domain. Once it is a custom domain of this Worker, every request on it
+    // redirects here: old discussion URLs to their topics, the rest to the same path (web/DEPLOY.md).
+    "LEGACY_HOSTS": "support.nodebox.net",
     // Cloudflare Images: image ids are global to the account, so they are prefixed. The variants are the account's shared ones.
     "CF_IMAGES_PREFIX": "nodebox-forum-",
     "CF_IMAGES_VARIANT_POST": "medium",

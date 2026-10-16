@@ -59,6 +59,11 @@ Run it against an empty, freshly migrated database. If the spam filter
 view comes in with status `spam` (hidden, restorable from `/admin`). To start
 over, delete `.wrangler/state` and run `npm run db:migrate:local` first.
 
+Links in posts to the old forum (`support.nodebox.net`, `*.tenderapp.com`)
+are rewritten to the new topics, categories and files. A bare URL becomes an
+absolute link on `https://forum.nodebox.net`; set `FORUM_URL` to import for
+another host (`FORUM_URL=http://localhost:8787 npm run import:tender`).
+
 ## Tests
 
 `npm test` runs the importer against a small Tender fixture, and the app itself

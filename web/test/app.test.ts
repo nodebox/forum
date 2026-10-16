@@ -1,9 +1,10 @@
 // Runs the Worker app in Node against local D1/R2 from wrangler's platform proxy.
-import { after, before, test } from "node:test";
+import { after, afterEach, before, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { format } from "node:util";
 import { getPlatformProxy } from "wrangler";
 import { app } from "../src/app.ts";
 import { sendDigests } from "../src/notifications.ts";
@@ -41,6 +42,21 @@ before(async () => {
     for (const stmt of sqlStatements(schema)) await env.DB.prepare(stmt).run();
   }
   await env.DB.prepare("INSERT INTO categories (id, slug, name) VALUES (1, 'questions', 'Questions')").run();
+});
+// The app logs sign-in mails (MAILER=log) and errors to the console. Keep that out
+// of the test output, and print it only for a test that fails.
+let logged: string[] = [];
+const realConsole = { log: console.log, error: console.error, warn: console.warn };
+beforeEach(() => {
+  logged = [];
+  for (const name of ["log", "error", "warn"] as const) {
+    console[name] = (...args: unknown[]) => void logged.push(format(...args));
+  }
+});
+afterEach((t) => {
+  Object.assign(console, realConsole);
+  // `passed` is in Node 22 but not yet in its types.
+  if ((t as { passed?: boolean }).passed === false && logged.length) console.error(`console output of "${t.name}":\n${logged.join("\n")}`);
 });
 after(async () => {
   await proxy.dispose();
@@ -326,15 +342,10 @@ test("the spam filter refuses spam from new accounts", async () => {
     // Posting keeps working when the filter is unsure, fails, or is switched off.
     const frank = await signIn("frank@example.com");
     assert.equal((await reply(frank, "A borderline mention of my shop")).status, 302, "spam below 0.9 is published");
-    const mails: string[] = [];
-    const realLog = console.log;
-    console.log = (...args: unknown[]) => void mails.push(args.join(" "));
-    try {
-      assert.equal((await reply(frank, "Posted during an outage")).status, 302, "an API error publishes");
-      assert.equal((await reply(frank, "Another outage post")).status, 302);
-    } finally {
-      console.log = realLog;
-    }
+    const start = logged.length;
+    assert.equal((await reply(frank, "Posted during an outage")).status, 302, "an API error publishes");
+    assert.equal((await reply(frank, "Another outage post")).status, 302);
+    const mails = logged.slice(start);
     // ...and tells the admins, once, not for every post.
     const alerts = mails.filter((m) => m.includes("the spam filter is unavailable"));
     const admins = (await env.DB.prepare("SELECT count(*) AS n FROM users WHERE is_admin = 1 AND email IS NOT NULL AND banned_at IS NULL").first()).n;

@@ -305,11 +305,32 @@ test("the spam filter refuses spam from new accounts", async () => {
     assert.equal(newTopic.status, 422);
     assert.equal((await env.DB.prepare("SELECT status FROM topics WHERE title = 'Win big'").first()).status, "spam");
     assert.equal((await env.DB.prepare("SELECT topic_count FROM categories WHERE id = 1").first()).topic_count, before);
+    // Refused posts are stored hidden from the start and logged; the author doesn't watch the topic.
+    const winBig = await env.DB.prepare("SELECT t.id, t.post_count, p.moderation_reason FROM topics t JOIN posts p ON p.topic_id = t.id WHERE t.title = 'Win big'").first();
+    assert.equal(winBig.post_count, 0);
+    assert.equal(winBig.moderation_reason, "Spam filter: casino advert");
+    assert.equal(await env.DB.prepare("SELECT 1 FROM topic_users WHERE topic_id = ?").bind(winBig.id).first(), null);
+    assert.ok(await env.DB.prepare("SELECT 1 FROM moderation_log WHERE topic_id = ? AND action = 'spam' AND admin_id IS NULL").bind(winBig.id).first());
 
     // Posting keeps working when the filter is unsure, fails, or is switched off.
     const frank = await signIn("frank@example.com");
     assert.equal((await reply(frank, "A borderline mention of my shop")).status, 302, "spam below 0.9 is published");
-    assert.equal((await reply(frank, "Posted during an outage")).status, 302, "an API error publishes");
+    const mails: string[] = [];
+    const realLog = console.log;
+    console.log = (...args: unknown[]) => void mails.push(args.join(" "));
+    try {
+      assert.equal((await reply(frank, "Posted during an outage")).status, 302, "an API error publishes");
+      assert.equal((await reply(frank, "Another outage post")).status, 302);
+    } finally {
+      console.log = realLog;
+    }
+    // ...and tells the admins, once, not for every post.
+    const alerts = mails.filter((m) => m.includes("the spam filter is unavailable"));
+    const admins = (await env.DB.prepare("SELECT count(*) AS n FROM users WHERE is_admin = 1 AND email IS NOT NULL AND banned_at IS NULL").first()).n;
+    assert.ok(admins > 0);
+    assert.equal(alerts.length, admins, "one alert per admin per window");
+    assert.ok(alerts.some((m) => /mail to alice@example\.com/.test(m)));
+    assert.match(alerts[0]!, /HTTP 529/);
     delete env.ANTHROPIC_API_KEY;
     const callsBefore = api.calls.length;
     assert.equal((await reply(frank, "No key, casino or not")).status, 302);

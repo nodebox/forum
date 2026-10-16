@@ -462,10 +462,10 @@ app.post("/new", async (c) => {
   if (body.length === 0) return fail("Write a message (or at least attach something and say what it is).");
   if (!(await rateLimit(c.env.DB, `post:${user.id}`, 20, 3600))) return fail("You're posting very fast. Please wait a while and try again.");
   const refusal = await refusalReason(c.env, user, { topicTitle: title, body, opensTopic: true });
-  const { topicId, postId } = await createTopic(c.env.DB, { categoryId: category.id, userId: user.id, title, body, attachmentIds: attachmentIds(form) });
+  const { topicId, postId } = await createTopic(c.env.DB, { categoryId: category.id, userId: user.id, title, body, attachmentIds: attachmentIds(form), refused: refusal });
   await settleAttachments(c.env, postId);
   if (refusal) {
-    await refusePost(c.env, postId, user.id, refusal);
+    await refusePost(c.env, { postId, topicId, userId: user.id, reason: refusal });
     return page(c, refusedPage(), { title: "Not posted", status: 422, mainClass: "narrow" });
   }
   const topic = await getTopic(c.env.DB, topicId);
@@ -485,10 +485,10 @@ app.post("/t/:id/reply", async (c) => {
     return page(c, messagePage("Slow down a little", "You're posting very fast. Please wait a while and try again."), { status: 429 });
   }
   const refusal = await refusalReason(c.env, user, { topicTitle: topic.title, body, opensTopic: false });
-  const postId = await createReply(c.env.DB, { topicId: topic.id, userId: user.id, body, attachmentIds: attachmentIds(form) });
+  const postId = await createReply(c.env.DB, { topicId: topic.id, userId: user.id, body, attachmentIds: attachmentIds(form), refused: refusal });
   await settleAttachments(c.env, postId);
   if (refusal) {
-    await refusePost(c.env, postId, user.id, refusal);
+    await refusePost(c.env, { postId, topicId: topic.id, userId: user.id, reason: refusal });
     return page(c, refusedPage(), { title: "Not posted", status: 422, mainClass: "narrow" });
   }
   return c.redirect(await postLink(c, topic, postId));

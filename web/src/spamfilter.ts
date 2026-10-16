@@ -1,10 +1,12 @@
-// Spam filter for new posts. It reads only what new accounts write, refuses
-// what it is sure about, and never stands in the way otherwise: no key, an
-// error, a slow answer or a doubtful verdict all mean the post is published.
+// Spam filter for new posts. It reads what new accounts write before the post
+// is stored, refuses what it is sure about, and never stands in the way
+// otherwise: no key, an error, a slow answer or a doubtful verdict all mean the
+// post is published. When the filter can't be reached the admins hear about it.
 import type { Bindings } from "./env.ts";
-import type { User } from "./db.ts";
 import { deletePostFiles } from "./files.ts";
-import { banUser, setPostStatus } from "./moderation.ts";
+import { banUser, log } from "./moderation.ts";
+import { sendMail } from "./mailer.ts";
+import { rateLimit, type User } from "./db.ts";
 
 const MODEL = "claude-haiku-5-5";
 /** The filter refuses a post only at this confidence or higher. */
@@ -16,6 +18,8 @@ const MAX_REFUSALS = 3;
 const TIMEOUT_MS = 5000;
 /** A refused post is kept this long, in case the filter was wrong, and then deleted. */
 const KEEP_REFUSED_MS = 30 * 24 * 3600 * 1000;
+/** Admins get at most one "filter unavailable" email in this window. */
+const ALERT_EVERY_SECONDS = 6 * 3600;
 
 const SYSTEM = `You check a new post on the NodeBox forum before it is published. NodeBox is a free,
 open-source family of tools for generative design and data visualisation. People ask questions
@@ -86,8 +90,38 @@ export async function refusalReason(env: Bindings, user: User, post: PostToCheck
     };
     return out.verdict === "spam" && Number(out.confidence) >= REFUSE_AT ? String(out.reason).slice(0, 280) : null;
   } catch (err) {
-    console.error(`spam filter unavailable, publishing: ${err instanceof Error ? err.message : err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`spam filter unavailable, publishing: ${message}`);
+    await alertAdmins(env, message);
     return null;
+  }
+}
+
+/**
+ * Tell the admins the filter is down, once per window: posts from new accounts
+ * are going out unchecked until it is back. Failing to send never blocks a post.
+ */
+async function alertAdmins(env: Bindings, error: string): Promise<void> {
+  try {
+    if (!(await rateLimit(env.DB, "alert:spam-filter", 1, ALERT_EVERY_SECONDS))) return;
+    const { results } = await env.DB.prepare("SELECT email FROM users WHERE is_admin = 1 AND email IS NOT NULL AND banned_at IS NULL").all<{ email: string }>();
+    const base = env.PUBLIC_URL.replace(/\/+$/, "");
+    const text = `The spam filter could not check a new post, so it was published unchecked:
+
+${error}
+
+Until the filter answers again, posts from new accounts go out without a check. Look at the latest posts, and hide spam from the topic page or ${base}/admin.
+
+You get this email at most once every ${ALERT_EVERY_SECONDS / 3600} hours.`;
+    const html = text
+      .split("\n\n")
+      .map((p) => `<p>${p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
+      .join("\n");
+    for (const { email } of results) {
+      await sendMail(env, { to: email, subject: `${env.SITE_NAME}: the spam filter is unavailable`, text, html });
+    }
+  } catch (err) {
+    console.error("could not alert the admins about the spam filter", err);
   }
 }
 
@@ -95,11 +129,12 @@ export async function refusalReason(env: Bindings, user: User, post: PostToCheck
 const REFUSED = "status = 'spam' AND moderated_by IS NULL AND tender_number IS NULL";
 
 /**
- * Hide a post the filter refused, and ban the account after too many. The post
- * stays restorable from /admin until the purge removes it.
+ * Log a post the filter refused (it was stored hidden), and ban the account
+ * after too many. The post stays restorable from /admin until the purge removes it.
  */
-export async function refusePost(env: Bindings, postId: number, userId: number, reason: string): Promise<void> {
-  await setPostStatus(env.DB, postId, "spam", null, `Spam filter: ${reason}`);
+export async function refusePost(env: Bindings, p: { postId: number; topicId: number; userId: number; reason: string }): Promise<void> {
+  const { userId } = p;
+  await log(env.DB, { adminId: null, action: "spam", postId: p.postId, topicId: p.topicId, userId, reason: `Spam filter: ${p.reason}` }).run();
   const refused = await env.DB.prepare(`SELECT count(*) AS n FROM posts WHERE user_id = ? AND ${REFUSED}`).bind(userId).first<{ n: number }>();
   if ((refused?.n ?? 0) >= MAX_REFUSALS) await banUser(env.DB, userId, null, false);
 }

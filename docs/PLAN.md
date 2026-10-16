@@ -213,8 +213,11 @@ There is no queue to work through:
 - A post the filter calls spam at confidence 0.9 or higher is not published.
   Its author is told so, without a reason, and given a contact address.
 - Three refused posts ban the account, so the filter can't be probed for long.
-- Everything else is published: a doubtful verdict, an error, a slow answer,
-  or no key at all.
+- The check runs before the post is stored, so other people and the feeds
+  never see a refused post, not even briefly.
+- Everything else is published: a doubtful verdict, an error, a slow answer
+  (5 seconds), or no key at all. When the filter can't be reached, the admins
+  get an email, at most one every 6 hours (Frederik, 2026-10-16).
 - A refused post is stored hidden, restorable from `/admin`, and deleted with
   its files after 30 days by the hourly cron.
 

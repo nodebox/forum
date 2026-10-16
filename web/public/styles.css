@@ -185,8 +185,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .main.narrow > * { grid-column: 1 / 7; }
 .main > .prose { grid-column: 1 / 7; }
 
-.site-footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; color: var(--ink-3); font-size: 15px; }
-.site-footer p { grid-column: 4 / -1; }
+.site-footer { border-top: 1px solid var(--rule); padding: 24px 0 40px; color: var(--ink-2); font-size: 16px; line-height: 24px; text-align: center; }
+.site-footer p { grid-column: 1 / -1; }
+.site-footer .site-footer-meta { color: var(--ink-3); font-size: 15px; }
 .site-footer a { color: var(--ink-2); }
 .site-footer .commit { font-family: var(--mono); }
 
@@ -504,7 +505,7 @@ article.prose > h1 { margin-bottom: 24px; }
 
 @media (max-width: 1024px) {
   .icon-button.nav-toggle { display: inline-grid; }
-  .main, .site-footer p { grid-column: 1 / -1; }
+  .main { grid-column: 1 / -1; }
   .sidebar { display: none; }
   .nav-open .sidebar { display: block; position: fixed; z-index: 25; top: 0; left: 0; bottom: 0; width: 288px; overflow-y: auto; padding: 24px; background: var(--paper); border-right: 1px solid var(--rule); box-shadow: 0 0 0 100vmax rgb(4 26 50 / 40%); }
 }

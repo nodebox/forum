@@ -154,10 +154,10 @@ export function layout(props: LayoutProps, content: Html): Html {
   </div>
   <footer class="site-footer">
     <div class="wrap grid">
-      <p>The NodeBox forum. Built by <a href="https://algorithmicgaze.com/">the Algorithmic Gaze</a>, our research group.
-        The forum is <a href="${SOURCE_URL}">open source</a>${props.commit
-          ? html`; this is version <a class="commit" href="${SOURCE_URL}/commit/${props.commit}">${props.commit.slice(0, 7)}</a>`
-          : ""}.</p>
+      <p>NodeBox is built by <a href="https://algorithmicgaze.com/">The Algorithmic Gaze</a> research group in Antwerp, Belgium.</p>
+      <p class="site-footer-meta">The forum is <a href="${SOURCE_URL}">open source</a>${props.commit
+        ? html`; this is version <a class="commit" href="${SOURCE_URL}/commit/${props.commit}">${props.commit.slice(0, 7)}</a>`
+        : ""}.</p>
     </div>
   </footer>
 </body>

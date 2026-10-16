@@ -11,13 +11,15 @@
 // What comes over: public categories; open/assigned/resolved public discussions;
 // comments that aren't internal notes or system messages; the users who wrote at least one visible post (deduplicated on
 // email); attachment metadata (files are uploaded separately); old URLs for
-// redirects.
+// redirects. Links in bodies to old attachments, discussions and category pages
+// point at their new place.
 // Items the spam filter flagged (the `spam_excluded` view, if present) are
 // imported with status 'spam': hidden, but admins can restore them.
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { isLegacyHost, tenderCategoryPermalink, tenderDiscussionNumber } from "../src/legacy.ts";
 
 export interface ImportStats {
   categories: number;
@@ -31,6 +33,12 @@ export interface ImportStats {
   skippedDiscussions: number;
 }
 
+/** Where bare links to old discussions point after the import. FORUM_URL overrides it. */
+const DEFAULT_FORUM_URL = "https://forum.nodebox.net";
+/** The old forum's custom domain; *.tenderapp.com and the hosts in the export's own URLs count too. */
+const LEGACY_HOSTS = ["support.nodebox.net"];
+/** Candidates for old links in a body: absolute URLs, and paths to old attachments and discussions. */
+const OLD_LINK = /https?:\/\/[^\s)"'<>\]]+|(?<![\w/.-])\/(?:assets|discussions)\/[^\s)"'<>\]]+/g;
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 /** Ids for placeholder users (authors without a Tender user record) start here, clear of Tender's ids. */
 const PLACEHOLDER_BASE = 2_000_000_000;
@@ -104,7 +112,7 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { statements: string[]; stats: ImportStats } {
+export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", forumUrl = DEFAULT_FORUM_URL): { statements: string[]; stats: ImportStats } {
   const out: string[] = [];
   const stats: ImportStats = { categories: 0, users: 0, topics: 0, posts: 0, spamTopics: 0, spamPosts: 0, attachments: 0, redirects: 0, skippedDiscussions: 0 };
 
@@ -125,12 +133,14 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
   const categories = src.prepare("SELECT id, name, permalink, summary, public FROM categories ORDER BY id").all() as any[];
   const catIds = new Set<number>();
   const usedSlugs = new Set<string>();
+  const categoryPathByPermalink = new Map<string, string>();
   categories.forEach((c, i) => {
     if (!isPublic(c.public)) return;
     let slug = slugify(c.permalink || c.name, 40);
     while (usedSlugs.has(slug)) slug += "-x";
     usedSlugs.add(slug);
     catIds.add(c.id);
+    categoryPathByPermalink.set(slugify(c.permalink || c.name, 40), `/c/${slug}`);
     out.push(insert("categories", { id: c.id, slug, name: c.name, description: c.summary ?? "", position: i, topic_count: 0, tender_id: c.id }));
     stats.categories++;
   });
@@ -175,8 +185,11 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     "SELECT download_path, comment_number, filename, content_type, size, width, height, created_at, local_path FROM attachments WHERE discussion_id = ?",
   );
 
-  // Old URLs -> new topic paths, for rewriting links inside bodies.
+  // Old URLs -> new topic paths, for rewriting links inside bodies. Keyed by the
+  // discussion number too, since old links may carry an earlier category or slug.
   const topicPathByOldUrl = new Map<string, string>();
+  const topicPathByNumber = new Map<number, string>();
+  const legacyHosts = new Set(LEGACY_HOSTS);
   const kept: { d: any; comments: any[]; slug: string }[] = [];
   for (const d of discussions) {
     if (!isPublic(d.public) || !catIds.has(d.category_id)) {
@@ -190,7 +203,14 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     }
     const slug = slugify(d.title ?? "topic");
     kept.push({ d, comments, slug });
-    if (d.html_href) topicPathByOldUrl.set(new URL(d.html_href).pathname.replace(/\/$/, ""), `/t/${d.id}/${slug}`);
+    if (d.html_href) {
+      const old = new URL(d.html_href);
+      const p = old.pathname.replace(/\/$/, "");
+      topicPathByOldUrl.set(p, `/t/${d.id}/${slug}`);
+      const n = tenderDiscussionNumber(p);
+      if (n !== null) topicPathByNumber.set(n, `/t/${d.id}/${slug}`);
+      legacyHosts.add(old.hostname.toLowerCase());
+    }
   }
 
   const categoryCounts = new Map<number, number>();
@@ -212,15 +232,34 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-"): { s
     for (const f of files) fileUrlByPath.set(f.download_path, `/files/${attachmentId(d.id, f.comment_number, f.download_path)}/${encodeURIComponent(f.filename ?? "file")}`);
 
     const rewrite = (text: string) =>
-      text.replace(/(https?:\/\/[^\s)"'<>]+|\/assets\/[^\s)"'<>]+|\/discussions\/[^\s)"'<>]+)/g, (url) => {
-        let p: string;
+      text.replace(OLD_LINK, (match: string, offset: number) => {
+        // A sentence's full stop or a Markdown emphasis mark after a bare URL is not part of it.
+        const url = match.replace(/[.,;:!?*_]+$/, "");
+        const tail = match.slice(url.length);
+        let u: URL;
         try {
-          p = new URL(url, "https://x").pathname;
+          u = new URL(url, "https://legacy.invalid");
         } catch {
-          return url;
+          return match;
         }
-        for (const [dp, fu] of fileUrlByPath) if (p === new URL(dp, "https://x").pathname) return fu;
-        return topicPathByOldUrl.get(p.replace(/\/$/, "")) ?? url;
+        const absolute = /^https?:/i.test(url);
+        const p = u.pathname.replace(/\/$/, "");
+        let found: string | undefined;
+        for (const [dp, fu] of fileUrlByPath) if (u.pathname === new URL(dp, "https://x").pathname) found = fu;
+        if (!found && (!absolute || isLegacyHost(u.hostname, legacyHosts))) {
+          const n = tenderDiscussionNumber(p);
+          found = topicPathByOldUrl.get(p) ?? (n !== null ? topicPathByNumber.get(n) : undefined);
+          // Category pages and the front page, only for links that name the old forum's host.
+          if (!found && absolute) {
+            const permalink = tenderCategoryPermalink(p);
+            if (permalink) found = categoryPathByPermalink.get(slugify(permalink, 40));
+            else if (p === "" || p === "/discussions") found = "/";
+          }
+        }
+        if (!found) return match;
+        // A bare URL was a link only because it was absolute, so it stays absolute; a Markdown link target can be a path.
+        const inTarget = text.slice(Math.max(0, offset - 2), offset) === "](";
+        return (absolute && !inTarget ? forumUrl + found : found) + tail;
       });
 
     const topicSpam = spamDiscussions.get(d.id) ?? (spamComments.has(`${d.id}:${comments[0].number}`) ? spamComments.get(`${d.id}:${comments[0].number}`)! : null);
@@ -338,7 +377,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
   const db = new DatabaseSync(input, { readOnly: true });
-  const { statements, stats } = convert(db);
+  const { statements, stats } = convert(db, undefined, (process.env.FORUM_URL ?? DEFAULT_FORUM_URL).replace(/\/$/, ""));
   fs.writeFileSync(output, statements.join("\n") + "\n");
   console.log(`Wrote ${statements.length} statements to ${output}`);
   console.table(stats);

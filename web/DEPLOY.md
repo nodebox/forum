@@ -51,13 +51,27 @@ requests; it holds no Cloudflare credentials.
    `npm run upload:attachments:remote`
 5. Make the first admin: `npm run admin -- grant <email> --remote`.
 6. Check: a sign-in email arrives, an upload works, a screenshot shows its
-   resized variant, an old Tender URL redirects.
+   resized variant, an old Tender path (`/discussions/…`) on the forum redirects.
 
 ## Read-only until the move
 
 `READ_ONLY` in `wrangler.jsonc` is `"true"` while Tender is still the forum:
 everyone can read and sign in, only admins can post, and every page says so.
 At the switch, do the final import first, then remove `READ_ONLY` and push.
+
+## The old domain
+
+Once Tender is switched off, point `support.nodebox.net` at the Worker so old
+links keep working: delete its DNS record (the CNAME to Tender) and add it as a
+second custom domain of the Worker. Every request on a host in `LEGACY_HOSTS`
+gets a 301 to the same page on `PUBLIC_URL`: old discussion URLs go to their
+topic (found by the discussion number, so moved and renamed discussions
+resolve too), category pages to their category, anything else to the same
+path, where it shows the forum's not-found page. Links to `*.tenderapp.com`
+can't be redirected; the import rewrites those inside posts instead.
+
+Check: `curl -sI https://support.nodebox.net/discussions/<category>/<number>-<slug>`
+answers 301 with the topic's URL.
 
 ## Deploying by hand
 

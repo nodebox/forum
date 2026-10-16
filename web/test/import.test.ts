@@ -129,6 +129,21 @@ test("converts a Tender export into forum rows", () => {
   assert.equal(stats.spamPosts, 2);
 });
 
+test("points links to the old forum at their new place", () => {
+  const src = fixture();
+  src.exec(`INSERT INTO comments (discussion_id, number, user_id, author_name, author_email, body, internal, created_at, raw) VALUES
+    (105, 3, NULL, 'Guest', 'guest@example.com', 'See http://support.nodebox.net/discussions/problems/100-crash-on-import. Also [this](https://nodebox.tenderapp.com/discussions/old-category/100-old-title#comment_123), https://support.nodebox.net/discussions/problems and https://github.com/discussions/problems/100-crash-on-import', 0, '2014-05-05T11:00:00Z', '{}');`);
+  const db = new DatabaseSync(":memory:");
+  db.exec(forumSchema);
+  db.exec(convert(src).statements.join("\n"));
+  const links = (db.prepare("SELECT body FROM posts WHERE topic_id = 105 AND tender_number = 3").get() as any).body;
+  assert.equal(
+    links,
+    "See https://forum.nodebox.net/t/100/crash-on-import. Also [this](/t/100/crash-on-import), https://forum.nodebox.net/c/problems and https://github.com/discussions/problems/100-crash-on-import",
+    "bare links stay absolute, moved and renamed discussions are found by number, other hosts are left alone",
+  );
+});
+
 test("works without spam verdicts", () => {
   const db = fixture();
   db.exec("DROP VIEW spam_excluded; DROP TABLE spam_verdicts; DROP TABLE spam_decisions;");

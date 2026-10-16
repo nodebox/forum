@@ -1,8 +1,28 @@
-// The forum's only script: dismissing the banner, the composer (drag and drop,
+// The forum's only script: the light/dark switch, dismissing the banner, the composer (drag and drop,
 // paste, preview) and live reactions. Everything else is plain HTML forms.
 
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel);
 const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)];
+
+// --- Light and dark -----------------------------------------------------------
+
+// The page follows the device until someone picks the other mode. Picking the
+// device's own mode again forgets the choice, so it follows the device again.
+const deviceDark = matchMedia("(prefers-color-scheme: dark)");
+for (const btn of $$("[data-theme-toggle]")) {
+  btn.addEventListener("click", () => {
+    const root = document.documentElement;
+    const isDark = root.dataset.theme ? root.dataset.theme === "dark" : deviceDark.matches;
+    const next = isDark ? "light" : "dark";
+    if ((next === "dark") === deviceDark.matches) {
+      delete root.dataset.theme;
+      document.cookie = "nbf_theme=; path=/; max-age=0; samesite=lax";
+    } else {
+      root.dataset.theme = next;
+      document.cookie = `nbf_theme=${next}; path=/; max-age=31536000; samesite=lax`;
+    }
+  });
+}
 
 // --- Banner -------------------------------------------------------------------
 

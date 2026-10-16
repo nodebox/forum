@@ -224,55 +224,76 @@ export async function reactionsForPosts(db: D1Database, postIds: number[], viewe
 
 export async function createTopic(
   db: D1Database,
-  input: { categoryId: number; userId: number; title: string; body: string; attachmentIds: string[] },
+  input: { categoryId: number; userId: number; title: string; body: string; attachmentIds: string[]; refused?: string | null },
 ): Promise<{ topicId: number; postId: number }> {
   const t = now();
+  // A post the spam filter refused is stored hidden from the start, so nobody else ever sees it.
+  const status = input.refused ? "spam" : "visible";
   const topic = await db
     .prepare(
-      `INSERT INTO topics (category_id, user_id, title, slug, created_at, last_post_at, last_post_user_id, post_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1) RETURNING id`,
+      `INSERT INTO topics (category_id, user_id, title, slug, created_at, last_post_at, last_post_user_id, post_count, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(input.categoryId, input.userId, input.title, slugify(input.title), t, t, input.userId)
+    .bind(input.categoryId, input.userId, input.title, slugify(input.title), t, t, input.userId, input.refused ? 0 : 1, status)
     .first<{ id: number }>();
   const topicId = topic!.id;
-  const post = await db
-    .prepare("INSERT INTO posts (topic_id, user_id, body, created_at) VALUES (?, ?, ?, ?) RETURNING id")
-    .bind(topicId, input.userId, input.body, t)
-    .first<{ id: number }>();
-  await db.batch([
-    db.prepare("UPDATE categories SET topic_count = topic_count + 1 WHERE id = ?").bind(input.categoryId),
-    // People who start a topic watch it, so they hear about replies.
-    db
-      .prepare("INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?) ON CONFLICT DO UPDATE SET watching = 1")
-      .bind(input.userId, topicId, t),
-    ...claimAttachments(db, post!.id, input.userId, input.attachmentIds),
+  const postId = await insertPost(db, topicId, input.userId, input.body, t, input.refused);
+  await batch(db, [
+    ...(input.refused
+      ? []
+      : [
+          db.prepare("UPDATE categories SET topic_count = topic_count + 1 WHERE id = ?").bind(input.categoryId),
+          // People who start a topic watch it, so they hear about replies.
+          db
+            .prepare("INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?) ON CONFLICT DO UPDATE SET watching = 1")
+            .bind(input.userId, topicId, t),
+        ]),
+    ...claimAttachments(db, postId, input.userId, input.attachmentIds),
   ]);
-  return { topicId, postId: post!.id };
+  return { topicId, postId };
+}
+
+/** D1 refuses an empty batch. */
+async function batch(db: D1Database, stmts: D1PreparedStatement[]): Promise<void> {
+  if (stmts.length) await db.batch(stmts);
+}
+
+/** Insert a post, visible, or hidden as spam with the filter's reason. */
+async function insertPost(db: D1Database, topicId: number, userId: number, body: string, t: string, refused?: string | null): Promise<number> {
+  const post = await db
+    .prepare(
+      `INSERT INTO posts (topic_id, user_id, body, created_at, status, moderated_at, moderation_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    )
+    .bind(topicId, userId, body, t, refused ? "spam" : "visible", refused ? t : null, refused ? `Spam filter: ${refused}` : null)
+    .first<{ id: number }>();
+  return post!.id;
 }
 
 export async function createReply(
   db: D1Database,
-  input: { topicId: number; userId: number; body: string; attachmentIds: string[] },
+  input: { topicId: number; userId: number; body: string; attachmentIds: string[]; refused?: string | null },
 ): Promise<number> {
   const t = now();
-  const post = await db
-    .prepare("INSERT INTO posts (topic_id, user_id, body, created_at) VALUES (?, ?, ?, ?) RETURNING id")
-    .bind(input.topicId, input.userId, input.body, t)
-    .first<{ id: number }>();
-  await db.batch([
-    db
-      .prepare("UPDATE topics SET post_count = post_count + 1, last_post_at = ?, last_post_user_id = ? WHERE id = ?")
-      .bind(t, input.userId, input.topicId),
-    // Replying watches the topic, unless the person turned watching off for it before.
-    db
-      .prepare(
-        `INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?)
-         ON CONFLICT DO UPDATE SET watching = coalesce(watching, 1), last_seen_at = excluded.last_seen_at`,
-      )
-      .bind(input.userId, input.topicId, t),
-    ...claimAttachments(db, post!.id, input.userId, input.attachmentIds),
+  const postId = await insertPost(db, input.topicId, input.userId, input.body, t, input.refused);
+  await batch(db, [
+    ...(input.refused
+      ? []
+      : [
+          db
+            .prepare("UPDATE topics SET post_count = post_count + 1, last_post_at = ?, last_post_user_id = ? WHERE id = ?")
+            .bind(t, input.userId, input.topicId),
+          // Replying watches the topic, unless the person turned watching off for it before.
+          db
+            .prepare(
+              `INSERT INTO topic_users (user_id, topic_id, watching, last_seen_at) VALUES (?, ?, 1, ?)
+               ON CONFLICT DO UPDATE SET watching = coalesce(watching, 1), last_seen_at = excluded.last_seen_at`,
+            )
+            .bind(input.userId, input.topicId, t),
+        ]),
+    ...claimAttachments(db, postId, input.userId, input.attachmentIds),
   ]);
-  return post!.id;
+  return postId;
 }
 
 /** Attach uploads to a post. Only the uploader's own, still-unattached files can be claimed. */

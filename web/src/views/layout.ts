@@ -24,6 +24,10 @@ export interface LayoutProps {
   query?: string;
   /** Extra class on <main>, e.g. "narrow". */
   mainClass?: string;
+  /** "light" or "dark" when the visitor picked one with the header button; otherwise the device decides. */
+  theme?: "light" | "dark" | null;
+  /** RSS feeds offered to browsers and feed readers, this page's own first. */
+  feeds?: { title: string; href: string }[];
 }
 
 /** The NodeBox Live mark (logo.svg from Frederik), drawn in the current text colour. */
@@ -75,6 +79,7 @@ function sidebar(props: LayoutProps): Html {
       ${item("/guidelines", "Guidelines", icon("file-text"))}
       ${item("https://www.nodebox.net/node/", "Documentation", icon("book-open"), { external: true })}
       ${item("/aup", "Acceptable use", icon("scale"))}
+      ${item("/feeds", "RSS feeds", icon("rss"))}
       ${item("https://www.nodebox.net/", "nodebox.net", icon("external-link"), { external: true })}
     </ul>
   </nav>`;
@@ -84,7 +89,7 @@ export function layout(props: LayoutProps, content: Html): Html {
   const title = props.title ? `${props.title} · ${props.siteName}` : props.siteName;
   const signInHref = `/signin?next=${encodeURIComponent(props.path)}`;
   return html`<!doctype html>
-<html lang="en">
+<html lang="en"${props.theme ? raw(` data-theme="${props.theme}"`) : ""}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -94,6 +99,7 @@ export function layout(props: LayoutProps, content: Html): Html {
   <link rel="preload" href="/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  ${(props.feeds ?? []).map((f) => html`<link rel="alternate" type="application/rss+xml" title="${f.title}" href="${f.href}">\n  `)}
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -110,6 +116,7 @@ export function layout(props: LayoutProps, content: Html): Html {
         <input id="search-q" name="q" type="search" value="${props.query ?? ""}" placeholder="Search questions and answers" autocomplete="off">
       </form>
       <nav class="header-nav" aria-label="Account">
+        <button type="button" class="icon-button header-icon theme-toggle" data-theme-toggle aria-label="Switch between light and dark" title="Switch between light and dark">${icon("moon", { size: 20, class: "icon-moon" })}${icon("sun", { size: 20, class: "icon-sun" })}</button>
         ${props.user
           ? html`<a class="icon-button header-icon" href="/topics/mine" aria-label="Your topics" title="Your topics">${icon("bell", { size: 20 })}</a>
               <details class="user-menu">

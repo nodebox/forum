@@ -8,7 +8,7 @@ const NAMES = [
   "plus", "heart", "smile-plus", "link", "reply", "paperclip", "eye", "eye-off", "circle-check",
   "pin", "lock", "settings", "log-out", "log-in", "chevron-left", "chevron-right", "x", "menu",
   "download", "file-archive", "file", "box", "image", "ban", "rotate-ccw", "trash-2", "user-round",
-  "search", "circle-help", "quote", "archive",
+  "search", "circle-help", "quote", "archive", "rss", "sun", "moon",
 ];
 
 const dir = path.join(import.meta.dirname, "../node_modules/lucide-static/icons");

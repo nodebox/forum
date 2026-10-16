@@ -24,6 +24,8 @@ export interface LayoutProps {
   query?: string;
   /** Extra class on <main>, e.g. "narrow". */
   mainClass?: string;
+  /** RSS feeds offered to browsers and feed readers, this page's own first. */
+  feeds?: { title: string; href: string }[];
 }
 
 /** The NodeBox Live mark (logo.svg from Frederik), drawn in the current text colour. */
@@ -75,6 +77,7 @@ function sidebar(props: LayoutProps): Html {
       ${item("/guidelines", "Guidelines", icon("file-text"))}
       ${item("https://www.nodebox.net/node/", "Documentation", icon("book-open"), { external: true })}
       ${item("/aup", "Acceptable use", icon("scale"))}
+      ${item("/feeds", "RSS feeds", icon("rss"))}
       ${item("https://www.nodebox.net/", "nodebox.net", icon("external-link"), { external: true })}
     </ul>
   </nav>`;
@@ -94,6 +97,7 @@ export function layout(props: LayoutProps, content: Html): Html {
   <link rel="preload" href="/fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  ${(props.feeds ?? []).map((f) => html`<link rel="alternate" type="application/rss+xml" title="${f.title}" href="${f.href}">\n  `)}
   <script type="module" src="/app.js"></script>
 </head>
 <body>

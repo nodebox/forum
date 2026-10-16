@@ -43,6 +43,7 @@ import { UploadError, fileUrl, imageUrls, isImage, settleAttachments, storeUploa
 import { refusalReason, refusePost } from "./spamfilter.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
+import { feedPosts, feedSearch, feedTopics, lastModified, renderFeed, type Feed } from "./feeds.ts";
 import { isEmail, normalizeEmail, safeNext } from "./util.ts";
 import { banUser, moderationQueue, recentLog, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
 import { logPage, queuePage, usersPage } from "./views/admin.ts";
@@ -52,6 +53,7 @@ import {
   checkEmailPage,
   confirmSignInPage,
   aupPage,
+  feedsPage,
   guidelinesPage,
   homePage,
   searchPage,
@@ -103,7 +105,15 @@ async function sidebarCategories(db: D1Database): Promise<Category[]> {
 async function page(
   c: Context<AppEnv>,
   content: Html,
-  opts: { title?: string; description?: string; status?: 200 | 400 | 403 | 404 | 422 | 429; mainClass?: string; query?: string } = {},
+  opts: {
+    title?: string;
+    description?: string;
+    status?: 200 | 400 | 403 | 404 | 422 | 429;
+    mainClass?: string;
+    query?: string;
+    /** This page's own feed, offered to feed readers ahead of the forum-wide ones. */
+    feed?: { title: string; href: string };
+  } = {},
 ) {
   const url = new URL(c.req.url);
   const [categories, unanswered] = await Promise.all([sidebarCategories(c.env.DB), unansweredCount(c.env.DB)]);
@@ -122,12 +132,19 @@ async function page(
         unanswered,
         query: opts.query,
         mainClass: opts.mainClass,
+        feeds: [...(opts.feed ? [opts.feed] : []), ...siteFeeds(c.env.SITE_NAME).filter((f) => f.href !== opts.feed?.href)],
       },
       content,
     ),
     opts.status ?? 200,
   );
 }
+
+/** Offered on every page through <link rel="alternate">. */
+const siteFeeds = (siteName: string) => [
+  { title: `${siteName}: new topics`, href: "/feeds/topics" },
+  { title: `${siteName}: all posts`, href: "/feeds/posts" },
+];
 
 const NOTICES: Record<string, string> = {
   "signed-in": "You're signed in.",
@@ -163,14 +180,19 @@ app.get("/", async (c) => {
     latestTopics(c.env.DB, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE),
   ]);
   const hasMore = topics.length > TOPICS_PER_PAGE;
-  return page(c, homePage(categories, topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))));
+  return page(c, homePage(categories, topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), {
+    feed: { title: `${c.env.SITE_NAME}: new topics`, href: "/feeds/topics" },
+  });
 });
 
 app.get("/unanswered", async (c) => {
   const p = pageNumber(c);
   const topics = await latestTopics(c.env.DB, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE, { unanswered: true });
   const hasMore = topics.length > TOPICS_PER_PAGE;
-  return page(c, unansweredPage(topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), { title: "Unanswered" });
+  return page(c, unansweredPage(topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), {
+    title: "Unanswered",
+    feed: { title: `${c.env.SITE_NAME}: unanswered`, href: "/feeds/unanswered" },
+  });
 });
 
 app.get("/search", async (c) => {
@@ -178,7 +200,11 @@ app.get("/search", async (c) => {
   const p = pageNumber(c);
   const hits = q ? await searchTopics(c.env.DB, q, TOPICS_PER_PAGE + 1, (p - 1) * TOPICS_PER_PAGE) : [];
   const hasMore = hits.length > TOPICS_PER_PAGE;
-  return page(c, searchPage(q, hits.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), { title: q ? `Search: ${q}` : "Search", query: q });
+  return page(c, searchPage(q, hits.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), {
+    title: q ? `Search: ${q}` : "Search",
+    query: q,
+    feed: q ? { title: `Posts matching “${q}”`, href: `/feeds/search?q=${encodeURIComponent(q)}` } : undefined,
+  });
 });
 
 app.get("/c/:slug", async (c) => {
@@ -190,6 +216,7 @@ app.get("/c/:slug", async (c) => {
   return page(c, categoryPage(category, topics.slice(0, TOPICS_PER_PAGE), p, hasMore, Boolean(c.get("user"))), {
     title: category.name,
     description: category.description,
+    feed: { title: `${category.name}: new topics`, href: `/feeds/c/${category.slug}` },
   });
 });
 
@@ -233,6 +260,7 @@ async function showTopic(c: Context<AppEnv>) {
   return page(c, topicPage(topic, rendered, user, { page: p, hasMore, firstIndex: (p - 1) * POSTS_PER_PAGE, watching: Boolean(state?.watching) }), {
     title: topic.title,
     description: shown[0] ? excerpt(shown[0].body) : undefined,
+    feed: { title: `Replies to “${topic.title}”`, href: `/feeds/t/${topic.id}` },
   });
 }
 // "N new" links from Your topics land on the first post the reader hasn't seen.
@@ -252,8 +280,156 @@ app.get("/t/:id/unread", async (c) => {
 app.get("/t/:id/:slug", showTopic);
 app.get("/t/:id", showTopic);
 
+// A short, stable link to one post, used by feeds; it finds the page the post is on.
+app.get("/p/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id)) return c.notFound();
+  const post = await c.env.DB.prepare(
+    "SELECT p.id, t.id AS topic_id, t.slug FROM posts p JOIN topics t ON t.id = p.topic_id WHERE p.id = ? AND p.status = 'visible' AND t.status = 'visible'",
+  )
+    .bind(id)
+    .first<{ id: number; topic_id: number; slug: string }>();
+  if (!post) return c.notFound();
+  return c.redirect(await postLink(c, { id: post.topic_id, slug: post.slug }, post.id), 301);
+});
+
 app.get("/guidelines", (c) => page(c, guidelinesPage(), { title: "Guidelines" }));
 app.get("/aup", (c) => page(c, aupPage(), { title: "Acceptable use" }));
+
+// --- Feeds --------------------------------------------------------------------
+
+const FEED_TOPICS = 30;
+const FEED_POSTS = 50;
+const FEED_MAX_AGE = 300;
+
+/**
+ * Feed readers poll, so a feed is kept in Cloudflare's cache for a few minutes and
+ * answers If-Modified-Since with a 304. Feeds are the same for everyone.
+ */
+async function feedResponse(c: Context<AppEnv>, build: () => Promise<Feed | null>): Promise<Response> {
+  const cache = typeof caches === "undefined" ? undefined : (caches as unknown as { default?: Cache }).default;
+  const key = new Request(c.req.url);
+  const hit = await cache?.match(key);
+  // Responses from the cache have immutable headers; the middleware still adds its own.
+  let res = hit ? new Response(hit.body, hit) : undefined;
+  if (!res) {
+    const feed = await build();
+    if (!feed) return c.notFound();
+    const headers = new Headers({
+      "Content-Type": "application/rss+xml; charset=utf-8",
+      "Cache-Control": `public, max-age=${FEED_MAX_AGE}`,
+      "X-Content-Type-Options": "nosniff",
+    });
+    const modified = lastModified(feed.rows);
+    if (modified) headers.set("Last-Modified", modified);
+    res = new Response(await renderFeed(c.env, c.env.DB, feed), { headers });
+    if (cache) {
+      const put = cache.put(key, res.clone());
+      try {
+        c.executionCtx.waitUntil(put);
+      } catch {
+        await put;
+      }
+    }
+  }
+  const since = Date.parse(c.req.header("if-modified-since") ?? "");
+  const modified = Date.parse(res.headers.get("last-modified") ?? "");
+  if (!Number.isNaN(since) && !Number.isNaN(modified) && modified <= since) {
+    return new Response(null, { status: 304, headers: { "Cache-Control": res.headers.get("cache-control")!, "Last-Modified": res.headers.get("last-modified")! } });
+  }
+  return res;
+}
+
+const siteName = (c: Context<AppEnv>) => c.env.SITE_NAME;
+
+app.get("/feeds", async (c) => page(c, feedsPage(await listCategories(c.env.DB)), { title: "RSS feeds" }));
+
+app.get("/feeds/topics", (c) =>
+  feedResponse(c, async () => ({
+    title: `${siteName(c)}: new topics`,
+    description: "New topics in every category of the NodeBox forum.",
+    page: "/",
+    self: "/feeds/topics",
+    rows: await feedTopics(c.env.DB, FEED_TOPICS),
+  })),
+);
+
+app.get("/feeds/posts", (c) =>
+  feedResponse(c, async () => ({
+    title: `${siteName(c)}: all posts`,
+    description: "Every new post on the NodeBox forum, replies included.",
+    page: "/",
+    self: "/feeds/posts",
+    rows: await feedPosts(c.env.DB, FEED_POSTS),
+  })),
+);
+
+app.get("/feeds/unanswered", (c) =>
+  feedResponse(c, async () => ({
+    title: `${siteName(c)}: unanswered`,
+    description: "New topics nobody has replied to yet.",
+    page: "/unanswered",
+    self: "/feeds/unanswered",
+    rows: await feedTopics(c.env.DB, FEED_TOPICS, { unanswered: true }),
+  })),
+);
+
+app.get("/feeds/c/:slug", (c) =>
+  feedResponse(c, async () => {
+    const category = await getCategory(c.env.DB, c.req.param("slug"));
+    if (!category) return null;
+    return {
+      title: `${siteName(c)}: ${category.name}`,
+      description: category.description || `New topics in ${category.name}.`,
+      page: `/c/${category.slug}`,
+      self: `/feeds/c/${category.slug}`,
+      rows: await feedTopics(c.env.DB, FEED_TOPICS, { categoryId: category.id }),
+    };
+  }),
+);
+
+app.get("/feeds/c/:slug/posts", (c) =>
+  feedResponse(c, async () => {
+    const category = await getCategory(c.env.DB, c.req.param("slug"));
+    if (!category) return null;
+    return {
+      title: `${siteName(c)}: ${category.name}, all posts`,
+      description: `Every new post in ${category.name}, replies included.`,
+      page: `/c/${category.slug}`,
+      self: `/feeds/c/${category.slug}/posts`,
+      rows: await feedPosts(c.env.DB, FEED_POSTS, { categoryId: category.id }),
+    };
+  }),
+);
+
+app.get("/feeds/t/:id", (c) =>
+  feedResponse(c, async () => {
+    const id = Number(c.req.param("id"));
+    const topic = Number.isInteger(id) ? await getTopic(c.env.DB, id) : null;
+    if (!topic) return null;
+    return {
+      title: `${siteName(c)}: ${topic.title}`,
+      description: `New replies to “${topic.title}” in ${topic.category_name}.`,
+      page: topicUrl(topic),
+      self: `/feeds/t/${topic.id}`,
+      rows: await feedPosts(c.env.DB, FEED_POSTS, { topicId: topic.id }),
+    };
+  }),
+);
+
+app.get("/feeds/search", (c) =>
+  feedResponse(c, async () => {
+    const q = (c.req.query("q") ?? "").trim().slice(0, 200);
+    if (!q) return null;
+    return {
+      title: `${siteName(c)}: “${q}”`,
+      description: `New posts that mention “${q}”.`,
+      page: `/search?q=${encodeURIComponent(q)}`,
+      self: `/feeds/search?q=${encodeURIComponent(q)}`,
+      rows: await feedSearch(c.env.DB, q, FEED_POSTS),
+    };
+  }),
+);
 
 // --- Writing ------------------------------------------------------------------
 

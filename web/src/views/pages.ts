@@ -106,6 +106,10 @@ const newTopicButton = (signedIn: boolean, category?: string) => {
   return html`<a class="button button-primary" href="${signedIn ? target : `/signin?next=${encodeURIComponent(target)}`}">${icon("plus", { size: 16 })}New topic</a>`;
 };
 
+/** A quiet link to the feed that follows this page. */
+const feedButton = (href: string, title: string) =>
+  html`<a class="button button-quiet" href="${href}" type="application/rss+xml" title="${title}">${icon("rss", { size: 16 })}RSS</a>`;
+
 function listTabs(active: "latest" | "unanswered"): Html {
   const tab = (href: string, key: string, label: string) =>
     html`<a href="${href}" class="tab${active === key ? " active" : ""}" ${active === key ? raw('aria-current="page"') : ""}>${label}</a>`;
@@ -117,7 +121,7 @@ export function homePage(_categories: Category[], latest: ListRow[], page: numbe
     ${mainHead({
       title: page === 1 ? "Latest" : `Latest, page ${page}`,
       lede: page === 1 ? "Questions, projects and bugs from the NodeBox community. Search first: many questions have been answered before." : undefined,
-      action: newTopicButton(signedIn),
+      action: html`${feedButton("/feeds/topics", "Follow new topics in every category by RSS")}${newTopicButton(signedIn)}`,
     })}
     ${listTabs("latest")}
     ${topicList(latest, { showCategory: true })}
@@ -129,7 +133,7 @@ export function unansweredPage(topics: ListRow[], page: number, hasMore: boolean
     ${mainHead({
       title: "Unanswered",
       lede: "Topics nobody has replied to yet. If you know something that helps, this is where it counts most.",
-      action: newTopicButton(signedIn),
+      action: html`${feedButton("/feeds/unanswered", "Follow unanswered topics by RSS")}${newTopicButton(signedIn)}`,
     })}
     ${listTabs("unanswered")}
     ${topicList(topics, { showCategory: true, empty: "Every topic has a reply. Nice." })}
@@ -141,7 +145,7 @@ export function searchPage(q: string, hits: (ListRow & { snippet: string | null 
     ${mainHead({
       title: q ? `Results for “${q}”` : "Search",
       lede: q ? undefined : "Search topic titles and posts.",
-      action: newTopicButton(signedIn),
+      action: html`${q ? feedButton(`/feeds/search?q=${encodeURIComponent(q)}`, `Follow new posts that mention “${q}” by RSS`) : ""}${newTopicButton(signedIn)}`,
     })}
     ${q
       ? hits.length === 0
@@ -158,7 +162,7 @@ export function categoryPage(category: Category, topics: ListRow[], page: number
       title: category.name,
       lede: category.description || undefined,
       kicker: html`<p class="kicker">${category.archived ? html`<span class="label label-archived">${icon("archive", { size: 16 })}Archive</span>` : ""}${count}</p>`,
-      action: category.archived ? undefined : newTopicButton(signedIn, category.slug),
+      action: html`${feedButton(`/feeds/c/${category.slug}`, `Follow new topics in ${category.name} by RSS`)}${category.archived ? "" : newTopicButton(signedIn, category.slug)}`,
     })}
     ${category.archived ? archiveNote(category.name) : ""}
     ${topicList(topics, { showCategory: false })}
@@ -245,6 +249,7 @@ export function topicPage(
         <div class="topic-actions">
           ${canReply ? html`<a class="button button-primary" href="${user ? "#reply" : signInToReply}">${icon("reply", { size: 16 })}Reply</a>` : ""}
           ${user ? watchForm(topic, opts.watching) : ""}
+          ${feedButton(`/feeds/t/${topic.id}`, "Follow replies to this topic by RSS")}
         </div>
       </div>
       ${isAdmin ? topicModBar(topic) : ""}
@@ -505,5 +510,29 @@ export function guidelinesPage(): Html {
       <li><strong>Be kind.</strong> Everyone was new once.</li>
     </ul>
     <p>The rules everyone agrees to are in the <a href="/aup">acceptable use policy</a>.</p>
+  </article>`;
+}
+
+export function feedsPage(categories: Category[]): Html {
+  const feed = (href: string, label: string) => html`<a href="${href}" type="application/rss+xml">${label}</a>`;
+  const categoryItem = (c: Category) =>
+    html`<li><strong>${c.name}</strong>: ${feed(`/feeds/c/${c.slug}`, "new topics")} or ${feed(`/feeds/c/${c.slug}/posts`, "every post")}</li>`;
+  const archived = categories.filter((c) => c.archived);
+  return html`<article class="prose narrow-prose">
+    <h1>RSS feeds</h1>
+    <p>Follow the forum in a feed reader, no account needed. Each feed carries the newest posts in full, with their pictures and attachments. Copy a link below into your reader, or give it the address of any forum page and it finds that page's feed by itself.</p>
+    <h2>The whole forum</h2>
+    <ul>
+      <li>${feed("/feeds/topics", "New topics")}, in every category.</li>
+      <li>${feed("/feeds/posts", "Every post")}, replies included. Busy, but nothing slips by.</li>
+      <li>${feed("/feeds/unanswered", "Unanswered topics")}, for anyone who likes to help.</li>
+    </ul>
+    <h2>One category</h2>
+    <ul>${categories.filter((c) => !c.archived).map(categoryItem)}</ul>
+    ${archived.length ? html`<p>In the archive:</p><ul>${archived.map(categoryItem)}</ul>` : ""}
+    <h2>One topic</h2>
+    <p>Every topic has an RSS button next to Reply. Its feed brings the new replies, like watching the topic but without the email.</p>
+    <h2>A search</h2>
+    <p>Search for something and use the RSS button on the results to hear about new posts that mention it, for example ${feed("/feeds/search?q=csv", "posts about CSV")}.</p>
   </article>`;
 }

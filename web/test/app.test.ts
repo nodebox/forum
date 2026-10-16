@@ -401,3 +401,83 @@ test("read-only: everyone can read and sign in, only admins can write", async ()
   assert.match(await refused.text(), /read-only/);
   assert.equal((await roReq("/new", { method: "POST", cookie: di, body: form({ title: "Admin test", category: "questions", body: "Hi" }) })).status, 302);
 });
+
+test("RSS feeds", async () => {
+  await env.DB.prepare("INSERT INTO categories (id, slug, name, description) VALUES (20, 'feeds-cat', 'Feeds & Things', 'Feed test')").run();
+  const rita = await signIn("rita@example.com");
+  let res = await req("/new", { method: "POST", cookie: rita, body: form({ title: "Feeds <are> great", category: "feeds-cat", body: "Look at [this](/guidelines) **now**" }) });
+  const topicPath = res.headers.get("location")!;
+  const topicId = Number(/\/t\/(\d+)/.exec(topicPath)![1]);
+  const sam = await signIn("sam@example.com");
+  res = await req(`/t/${topicId}/reply`, { method: "POST", cookie: sam, body: form({ body: "A reply about zeppelins" }) });
+  const replyId = Number(/#post-(\d+)/.exec(res.headers.get("location")!)![1]);
+  res = await req(`/t/${topicId}/reply`, { method: "POST", cookie: sam, body: form({ body: "Hidden zeppelins" }) });
+  const hiddenId = Number(/#post-(\d+)/.exec(res.headers.get("location")!)![1]);
+  await env.DB.prepare("UPDATE posts SET status = 'spam' WHERE id = ?").bind(hiddenId).run();
+
+  const feed = async (p: string) => {
+    const r = await req(p);
+    assert.equal(r.status, 200, p);
+    assert.match(r.headers.get("content-type")!, /^application\/rss\+xml/);
+    return r.text();
+  };
+
+  // New topics: the opening post in full, with absolute links, escaped once.
+  let xml = await feed("/feeds/topics");
+  assert.match(xml, /<title>Feeds &lt;are&gt; great<\/title>/);
+  assert.match(xml, /<category domain="http:\/\/localhost\/c\/feeds-cat">Feeds &amp; Things<\/category>/);
+  assert.match(xml, /href=&quot;http:\/\/localhost\/guidelines&quot;/);
+  assert.match(xml, /&lt;strong&gt;now&lt;\/strong&gt;/);
+  assert.match(xml, new RegExp(`<link>http://localhost/t/${topicId}/feeds-are-great</link>`));
+  assert.doesNotMatch(xml, /zeppelins/, "replies are not in the topics feed");
+
+  // All posts: replies too, but never hidden ones.
+  xml = await feed("/feeds/posts");
+  assert.match(xml, /<title>Re: Feeds &lt;are&gt; great<\/title>/);
+  assert.match(xml, new RegExp(`<link>http://localhost/p/${replyId}</link>`));
+  assert.doesNotMatch(xml, /Hidden zeppelins/);
+
+  // Per category, per topic, unanswered, search.
+  assert.match(await feed("/feeds/c/feeds-cat"), /Feeds &lt;are&gt; great/);
+  assert.match(await feed("/feeds/c/feeds-cat/posts"), /A reply about zeppelins/);
+  assert.doesNotMatch(await feed("/feeds/c/questions"), /Feeds &lt;are&gt;/);
+  xml = await feed(`/feeds/t/${topicId}`);
+  assert.match(xml, /A reply about zeppelins/);
+  assert.doesNotMatch(xml, /Hidden zeppelins/);
+  assert.doesNotMatch(await feed("/feeds/unanswered"), /Feeds &lt;are&gt;/, "a topic with a reply is answered");
+  xml = await feed("/feeds/search?q=zeppelins");
+  assert.match(xml, /A reply about zeppelins/);
+  assert.doesNotMatch(xml, /Hidden zeppelins/);
+  assert.doesNotMatch(xml, /Look at/, "a match in a reply doesn't bring the opening post");
+  assert.match(await feed("/feeds/search?q=great"), /Look at/, "a title match brings the opening post");
+  assert.equal((await req("/feeds/c/nope")).status, 404);
+  assert.equal((await req("/feeds/t/999999")).status, 404);
+  assert.equal((await req("/feeds/t/abc")).status, 404);
+  assert.equal((await req("/p/abc")).status, 404);
+  assert.equal((await req("/feeds/search")).status, 404);
+  // A hidden topic has no feed.
+  await env.DB.prepare("UPDATE topics SET status = 'removed' WHERE id = ?").bind(topicId).run();
+  assert.equal((await req(`/feeds/t/${topicId}`)).status, 404);
+  assert.doesNotMatch(await feed("/feeds/posts"), /zeppelins/);
+  await env.DB.prepare("UPDATE topics SET status = 'visible' WHERE id = ?").bind(topicId).run();
+
+  // Readers that send If-Modified-Since get a 304 until something new is posted.
+  const first = await req("/feeds/posts");
+  const modified = first.headers.get("last-modified")!;
+  assert.ok(modified);
+  assert.equal((await req("/feeds/posts", { headers: { "if-modified-since": modified } })).status, 304);
+  assert.equal((await req("/feeds/posts", { headers: { "if-modified-since": "Thu, 01 Jan 2004 00:00:00 GMT" } })).status, 200);
+
+  // Item links lead to the post.
+  res = await req(`/p/${replyId}`);
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get("location"), `${topicPath}#post-${replyId}`);
+  assert.equal((await req(`/p/${hiddenId}`)).status, 404);
+
+  // Pages point feed readers at their feed, and the overview lists every category.
+  const page = await (await req(topicPath)).text();
+  assert.match(page, new RegExp(`<link rel="alternate" type="application/rss\\+xml" title="Replies to “Feeds &lt;are&gt; great”" href="/feeds/t/${topicId}">`));
+  assert.match(page, /href="\/feeds\/topics"/);
+  assert.match(await (await req("/c/feeds-cat")).text(), /<link rel="alternate" type="application\/rss\+xml" title="Feeds &amp; Things: new topics" href="\/feeds\/c\/feeds-cat">/);
+  assert.match(await (await req("/feeds")).text(), /\/feeds\/c\/feeds-cat\/posts/);
+});

@@ -129,6 +129,13 @@ Kept out on purpose: tags, signatures, private messages, ranks, badges,
 polls, category subscriptions, rich-text toolbar. Posts are Markdown with a
 Write/Preview toggle and a one-line hint.
 
+RSS feeds (RSS 2.0, under `/feeds`, listed on `/feeds`): new topics, every
+post, unanswered; per category new topics or every post; replies to one
+topic; new posts matching a search. Items carry the whole post with absolute
+links and attachments. Every page announces its own feed with `<link
+rel="alternate">` and has a quiet RSS button. Feeds show only visible posts,
+also to admins, and sit in Cloudflare's cache for five minutes.
+
 Hearts and reactions: every post has a heart, always visible, one click to
 like (as on Discourse). Five more emoji (👍 😄 🎉 🤔 👀) sit behind "+ React"
 and only show once someone used them. Counts carry the names of who reacted

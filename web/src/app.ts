@@ -88,8 +88,11 @@ app.use(async (c, next) => {
   // Concatenated, not resolved with new URL(): a path like //evil.example would leave the site.
   return c.redirect(c.env.PUBLIC_URL.replace(/\/$/, "") + target, 301);
 });
-app.use(secureHeaders({ crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false }));
-// Rejects cross-site form posts by checking the Origin header; with SameSite=Lax
+// Referrer-Policy same-origin, not Hono's default no-referrer: under no-referrer browsers send
+// "Origin: null" on our own form posts, and Safari, which may not send Sec-Fetch-Site either,
+// then fails the check below with "Forbidden". Other sites still get no referrer.
+app.use(secureHeaders({ crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false, referrerPolicy: "same-origin" }));
+// Rejects cross-site form posts by checking the Origin header (or Sec-Fetch-Site); with SameSite=Lax
 // session cookies this is the CSRF protection.
 // Mail providers POST one-click unsubscribes (RFC 8058) from their own origin; the token is the check there.
 const checkOrigin = csrf();

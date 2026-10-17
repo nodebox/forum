@@ -177,6 +177,16 @@ test("cross-site posts are rejected", async () => {
   assert.equal(res.status, 403);
 });
 
+test("same-site form posts work without Sec-Fetch-Site (Safari)", async () => {
+  // Pages must not use no-referrer: browsers then send "Origin: null" on form posts.
+  assert.equal((await req("/signin")).headers.get("referrer-policy"), "same-origin");
+  const headers = { origin: ORIGIN, "content-type": "application/x-www-form-urlencoded" };
+  const res = await app.request(ORIGIN + "/signin", { method: "POST", headers, body: form({ email: "safari@example.com" }) }, env);
+  assert.notEqual(res.status, 403);
+  const nullOrigin = await app.request(ORIGIN + "/signin", { method: "POST", headers: { ...headers, origin: "null" }, body: form({ email: "safari@example.com" }) }, env);
+  assert.equal(nullOrigin.status, 403);
+});
+
 test("legacy URLs redirect", async () => {
   await env.DB.prepare("INSERT INTO users (id, name, created_at) VALUES (900, 'x', '2010')").run();
   await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at) VALUES (4711, 1, 900, 'Old', 'old', '2010', '2010')").run();

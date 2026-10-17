@@ -1,6 +1,6 @@
 // The forum's only script: the light/dark switch, dismissing the banner, the composer (drag and drop,
-// paste, preview), live reactions, looping short videos and the picture lightbox. Everything else is
-// plain HTML forms.
+// paste, preview), live reactions, short videos that loop and play by themselves, and the picture
+// lightbox. Everything else is plain HTML forms.
 
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel);
 const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)];
@@ -290,27 +290,68 @@ document.addEventListener("click", (e) => {
   textarea.scrollIntoView({ block: "center" });
 });
 
-// --- Short videos loop --------------------------------------------------------
+// --- Short videos loop and play by themselves ----------------------------------
 
 // A video of 30 seconds or less (as the player shows it, so 0:30.8 counts)
-// loops once someone presses play, like a GIF. Nothing plays by itself and
-// sound never loops. A file without a known length (some WebM recordings
-// report Infinity) plays once. The length is known only once the metadata has
-// loaded, which can happen before this script runs, so check both ways.
-// loadedmetadata doesn't bubble, so listen in the capture phase: that also
-// covers videos in the composer's preview.
+// behaves like a GIF: it loops, and plays muted while at least half of it is
+// on screen, pausing when it scrolls away. Only the videos in view load.
+// - Sound attachments and longer videos only play when someone presses play.
+// - A file without a known length (some WebM recordings report Infinity) is
+//   treated as long.
+// - With reduced motion or the browser's data saver on, short videos still
+//   loop but don't start by themselves.
+// - Once someone pauses, unmutes or seeks, the video is theirs: no more
+//   automatic play or pause for it.
+// - If the browser refuses to autoplay (iOS Low Power Mode), nothing happens.
+// The length is known only once the metadata has loaded, which can happen
+// before this script runs, so check both ways. loadedmetadata doesn't bubble,
+// so listen in the capture phase: that also covers the composer's preview.
 const LOOP_MAX_SECONDS = 30;
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+const autoplaying = new WeakSet<HTMLVideoElement>();
+const pausedByUs = new WeakSet<HTMLVideoElement>();
+const inView = new IntersectionObserver((entries) => {
+  for (const { target, isIntersecting } of entries) {
+    const video = target as HTMLVideoElement;
+    if (!autoplaying.has(video) || reducedMotion.matches) continue;
+    if (isIntersecting) video.play().catch(() => {});
+    else if (!video.paused) {
+      pausedByUs.add(video);
+      video.pause();
+    }
+  }
+}, { threshold: 0.5 });
 
-function loopIfShort(video: HTMLVideoElement) {
+function handOver(video: HTMLVideoElement) {
+  autoplaying.delete(video);
+  inView.unobserve(video);
+}
+
+function setupShort(video: HTMLVideoElement) {
   const d = video.duration;
-  if (Number.isFinite(d) && d > 0 && Math.floor(d) <= LOOP_MAX_SECONDS) video.loop = true;
+  if (!Number.isFinite(d) || d <= 0 || Math.floor(d) > LOOP_MAX_SECONDS || video.loop) return;
+  video.loop = true;
+  if (saveData || reducedMotion.matches) return;
+  video.muted = true;
+  autoplaying.add(video);
+  video.addEventListener("pause", () => {
+    if (pausedByUs.delete(video)) return;
+    handOver(video);
+  });
+  video.addEventListener("volumechange", () => { if (!video.muted) handOver(video); });
+  video.addEventListener("seeking", () => {
+    // A loop restarting also seeks, to the start; only a seek elsewhere is someone's.
+    if (video.currentTime > 0.5) handOver(video);
+  });
+  inView.observe(video);
 }
 
 document.addEventListener("loadedmetadata", (e) => {
-  if (e.target instanceof HTMLVideoElement && e.target.matches(".post-video")) loopIfShort(e.target);
+  if (e.target instanceof HTMLVideoElement && e.target.matches(".post-video")) setupShort(e.target);
 }, true);
 for (const video of $$<HTMLVideoElement>("video.post-video")) {
-  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) loopIfShort(video);
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA) setupShort(video);
 }
 
 // --- Lightbox -----------------------------------------------------------------

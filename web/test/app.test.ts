@@ -458,6 +458,12 @@ test("read-only: everyone can read and sign in, only admins can write", async ()
   assert.equal((await roReq("/new", { method: "POST", cookie: di, body: form({ title: "Admin test", category: "questions", body: "Hi" }) })).status, 302);
 });
 
+test("FORUM_NOTICE shows a banner on every page, read-only or not", async () => {
+  const noticed = { ...env, FORUM_NOTICE: "Maintenance on Sunday" };
+  assert.match(await (await app.request(ORIGIN + "/", {}, noticed)).text(), /Maintenance on Sunday/);
+  assert.doesNotMatch(await (await req("/")).text(), /Maintenance on Sunday/);
+});
+
 test("RSS feeds", async () => {
   await env.DB.prepare("INSERT INTO categories (id, slug, name, description) VALUES (20, 'feeds-cat', 'Feeds & Things', 'Feed test')").run();
   const rita = await signIn("rita@example.com");

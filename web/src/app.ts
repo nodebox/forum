@@ -144,6 +144,7 @@ async function page(
         user: c.get("user"),
         notice: c.get("notice") ?? noticeFromQuery(url),
         alert: forumNotice(c),
+        readOnly: c.env.READ_ONLY === "true",
         showBanner: !c.get("user") && getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
         path: url.pathname + url.search,
         siteName: c.env.SITE_NAME,

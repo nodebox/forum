@@ -14,6 +14,7 @@ export interface LayoutProps {
   notice?: string | null;
   /** A standing message on every page, such as read-only mode. */
   alert?: string | null;
+  readOnly?: boolean;
   showBanner?: boolean;
   /** Path of the current page, used for "sign in" return links and the active sidebar item. */
   path: string;
@@ -140,7 +141,7 @@ export function layout(props: LayoutProps, content: Html): Html {
   <div class="wrap grid shell">
     ${sidebar(props)}
     <main id="main" class="main ${props.mainClass ?? ""}">
-      ${props.alert ? html`<p class="welcome alert" role="status">${icon("lock", { size: 18 })}<span>${props.alert}</span></p>` : ""}
+      ${props.alert ? html`<p class="welcome alert" role="status">${icon(props.readOnly ? "lock" : "bell", { size: 18 })}<span>${props.alert}</span></p>` : ""}
       ${props.showBanner && !props.alert
         ? html`<aside class="welcome" data-banner aria-label="About this forum">
             <p><strong>Welcome to the new NodeBox forum.</strong>

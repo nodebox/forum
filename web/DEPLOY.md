@@ -76,7 +76,8 @@ On the machine with `data/`, from the repo root:
    prints, then `npx wrangler d1 execute nodebox-forum --remote --file ../data/top-up.sql`.
 6. `npm run upload:attachments:remote` uploads the new files; files already
    there are skipped.
-7. Remove `READ_ONLY` from `wrangler.jsonc`, commit and push.
+7. Remove `READ_ONLY` from `wrangler.jsonc`, and change or remove
+   `FORUM_NOTICE`, the banner on every page. Commit and push.
 
 ## The old domain
 

@@ -167,6 +167,7 @@ export interface AdminUserRow {
   banned_at: string | null;
   created_at: string;
   tender_id: number | null;
+  avatar: string | null;
   post_count: number;
 }
 
@@ -174,7 +175,7 @@ export async function searchUsers(db: D1Database, q: string, limit = 50): Promis
   const like = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
   const where = q ? "WHERE u.email LIKE ?1 ESCAPE '\\' OR u.name LIKE ?1 ESCAPE '\\'" : "WHERE u.is_admin = 1 OR u.banned_at IS NOT NULL";
   const stmt = db.prepare(
-    `SELECT u.id, u.name, u.email, u.is_admin, u.banned_at, u.created_at, u.tender_id,
+    `SELECT u.id, u.name, u.email, u.is_admin, u.banned_at, u.created_at, u.tender_id, u.avatar,
             (SELECT count(*) FROM posts p WHERE p.user_id = u.id) AS post_count
      FROM users u ${where} ORDER BY u.is_admin DESC, u.name LIMIT ${limit}`,
   );

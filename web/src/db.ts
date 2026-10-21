@@ -10,6 +10,8 @@ export interface User {
   tender_id: number | null;
   claimed_at: string | null;
   email_digest: number;
+  /** Profile picture (src/avatars.ts); null shows initials. */
+  avatar: string | null;
 }
 
 export type PostStatus = "visible" | "spam" | "removed";
@@ -57,6 +59,8 @@ export interface PostRow {
   status: PostStatus;
   moderation_reason: string | null;
   author_name: string;
+  /** Null for no picture, and while the author is banned. */
+  author_avatar: string | null;
   author_is_admin: number;
   author_tender_id: number | null;
 }
@@ -183,7 +187,7 @@ export async function getTopic(db: D1Database, id: number, includeHidden = false
 export async function topicPosts(db: D1Database, topicId: number, limit: number, offset: number, includeHidden = false): Promise<PostRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT p.*, u.name AS author_name, u.is_admin AS author_is_admin, u.tender_id AS author_tender_id
+      `SELECT p.*, u.name AS author_name, CASE WHEN u.banned_at IS NULL THEN u.avatar END AS author_avatar, u.is_admin AS author_is_admin, u.tender_id AS author_tender_id
        FROM posts p JOIN users u ON u.id = p.user_id
        WHERE p.topic_id = ? ${includeHidden ? "" : "AND p.status = 'visible'"}
        ORDER BY p.created_at, p.id LIMIT ? OFFSET ?`,

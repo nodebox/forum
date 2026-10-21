@@ -3,7 +3,7 @@ import type { PostRow, TopicRow } from "../db.ts";
 import { excerpt } from "../markdown.ts";
 import { REMOVAL_REASONS, type AdminUserRow, type LogRow, type QueueItem } from "../moderation.ts";
 import { timeAgo } from "../util.ts";
-import type { Html } from "./layout.ts";
+import { avatar, type Html } from "./layout.ts";
 import { icon } from "./icons.ts";
 
 const STATUS_LABEL = { spam: "Marked as spam", removed: "Removed", visible: "" } as const;
@@ -105,7 +105,7 @@ export function usersPage(q: string, users: AdminUserRow[], selfId: number): Htm
           <tbody>
             ${users.map(
               (u) => html`<tr>
-                <td>${u.name}${u.tender_id ? html` <span class="muted small">(old forum)</span>` : ""}</td>
+                <td><span class="user-cell">${avatar({ ...u, avatar: u.banned_at ? null : u.avatar }, "sm")}<span>${u.name}${u.tender_id ? html` <span class="muted small">(old forum)</span>` : ""}</span></span></td>
                 <td class="small">${u.email ?? "—"}</td>
                 <td>${u.post_count}</td>
                 <td>${u.is_admin ? html`<span class="tag tag-team">Admin</span>` : ""}${u.banned_at ? html`<span class="tag tag-danger">Banned</span>` : ""}</td>
@@ -114,6 +114,7 @@ export function usersPage(q: string, users: AdminUserRow[], selfId: number): Htm
                     ? html`<span class="muted small">You</span>`
                     : html`<form method="post" action="/admin/users/${u.id}">
                         <input type="hidden" name="return" value="/admin/users${q ? `?q=${encodeURIComponent(q)}` : ""}">
+                        ${u.avatar ? html`<button class="button button-small button-quiet" name="action" value="remove_picture">Remove picture</button>` : ""}
                         ${u.banned_at
                           ? html`<button class="button button-small button-quiet" name="action" value="unban">Unban</button>`
                           : html`${u.is_admin
@@ -136,6 +137,7 @@ const ACTION_LABEL: Record<string, string> = {
   unban: "unbanned",
   grant_admin: "made admin:",
   revoke_admin: "removed admin from",
+  remove_picture: "removed the profile picture of",
   pin: "pinned a topic",
   unpin: "unpinned a topic",
   lock: "locked a topic",

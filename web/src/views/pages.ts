@@ -301,10 +301,10 @@ export function topicPage(
     <ol class="posts" start="${opts.firstIndex + 1}">
       ${posts.map(
         (p) => html`<li class="post${p.post.status !== "visible" ? " post-hidden" : ""}" id="post-${p.post.id}">
-          <div class="post-avatar">${avatar({ id: p.post.user_id, name: p.post.author_name })}</div>
+          <div class="post-avatar">${avatar({ id: p.post.user_id, name: p.post.author_name, avatar: p.post.author_avatar })}</div>
           <article class="post-main">
             <header class="post-head">
-              <span class="avatar-inline">${avatar({ id: p.post.user_id, name: p.post.author_name }, "sm")}</span>
+              <span class="avatar-inline">${avatar({ id: p.post.user_id, name: p.post.author_name, avatar: p.post.author_avatar }, "sm")}</span>
               <span class="post-author">${p.post.author_name}</span>
               ${p.post.author_is_admin ? html`<span class="tag tag-team">NodeBox team</span>` : ""}
               <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
@@ -480,11 +480,14 @@ export function profileForm(opts: {
   error?: string;
   /** Show the email digest setting (Settings page only). */
   digest?: boolean;
+  /** Show the profile picture setting (Settings page only). */
+  picture?: { user: { id: number; name: string; avatar: string | null }; error?: string };
 }): Html {
   return html`<div class="auth-card">
     <h1>${opts.heading}</h1>
     <p class="lede">${opts.intro}</p>
     ${opts.error ? html`<p class="form-error" role="alert">${opts.error}</p>` : ""}
+    ${opts.picture ? pictureField(opts.picture.user, opts.picture.error) : ""}
     <form method="post" action="/settings" class="stack">
       <input type="hidden" name="next" value="${opts.next}">
       <div class="field">
@@ -502,6 +505,33 @@ export function profileForm(opts: {
       <button class="button button-primary" type="submit">${opts.submit}</button>
     </form>
   </div>`;
+}
+
+/**
+ * The profile picture: a preview, a button to pick a file and one to go back to initials.
+ * With the script, picking a file opens the circle crop (client/app.ts); without it, the
+ * Upload button sends the file as it is and the circle shows its middle.
+ */
+function pictureField(user: { id: number; name: string; avatar: string | null }, error?: string): Html {
+  return html`<section class="picture" aria-labelledby="picture-h" data-picture>
+    <h2 id="picture-h" class="picture-label">Profile picture</h2>
+    <div class="picture-row">
+      <span data-picture-preview>${avatar(user, "lg")}</span>
+      <div class="picture-actions">
+        <form method="post" action="/settings/picture" enctype="multipart/form-data" class="picture-buttons" data-picture-form>
+          <label class="button button-quiet picture-pick">${icon("image", { size: 16 })}${user.avatar ? "Change picture" : "Choose a picture"}<input class="visually-hidden" type="file" name="picture" accept="image/*" required data-picture-file></label>
+          <button class="button button-quiet" type="submit" data-picture-submit>Upload</button>
+        </form>
+        ${user.avatar
+          ? html`<form method="post" action="/settings/picture/remove">
+              <button class="button button-quiet" type="submit">${icon("trash-2", { size: 16 })}Remove</button>
+            </form>`
+          : ""}
+      </div>
+    </div>
+    <p class="hint">Shown next to your posts instead of your initials. After you pick a file, you choose which part goes in the circle.</p>
+    ${error ? html`<p class="form-error" role="alert" data-picture-error>${error}</p>` : html`<p class="form-error" role="alert" data-picture-error hidden></p>`}
+  </section>`;
 }
 
 export function messagePage(heading: string, message: string | Html, action?: { href: string; label: string }): Html {

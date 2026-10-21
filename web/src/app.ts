@@ -24,6 +24,7 @@ import {
   topicPosts,
   type Attachment,
   type Category,
+  type User,
 } from "./db.ts";
 import { markSeen, setWatching, topicUserState, yourThreads } from "./notifications.ts";
 import {
@@ -42,11 +43,12 @@ import {
 } from "./auth.ts";
 import { UploadError, fileUrl, imageUrls, isImage, parseRange, playable, settleAttachments, storeUpload } from "./files.ts";
 import { refusalReason, refusePost } from "./spamfilter.ts";
+import { AvatarError, avatarKey, removeAvatar, setAvatar } from "./avatars.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
 import { feedPosts, feedSearch, feedTopics, lastModified, renderFeed, type Feed } from "./feeds.ts";
 import { isEmail, normalizeEmail, safeNext } from "./util.ts";
-import { banUser, moderationQueue, recentLog, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
+import { banUser, log, moderationQueue, recentLog, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
 import { logPage, queuePage, usersPage } from "./views/admin.ts";
 import { layout, type Html } from "./views/layout.ts";
 import {
@@ -129,7 +131,7 @@ async function page(
   opts: {
     title?: string;
     description?: string;
-    status?: 200 | 400 | 403 | 404 | 422 | 429;
+    status?: 200 | 400 | 403 | 404 | 413 | 415 | 422 | 429;
     mainClass?: string;
     query?: string;
     /** This page's own feed, offered to feed readers ahead of the forum-wide ones. */
@@ -175,6 +177,8 @@ const NOTICES: Record<string, string> = {
   "signed-out": "You're signed out.",
   welcome: "Welcome back! Your posts from the old forum are linked to your account.",
   saved: "Saved.",
+  picture: "Your new picture is in place.",
+  "picture-removed": "Your picture is gone; your initials are back.",
 };
 /** The full commit hash Workers Builds deployed, or null in development. */
 export function deployedCommit(value: string | undefined): string | null {
@@ -747,10 +751,68 @@ app.get("/welcome", (c) => {
 app.get("/settings", (c) => {
   const { user, redirect } = requireUser(c);
   if (redirect) return redirect;
-  return page(c, profileForm({ heading: "Settings", intro: `Signed in as ${user.email}.`, name: user.name, next: "/settings?notice=saved", submit: "Save", digest: Boolean(user.email_digest) }), {
-    title: "Settings",
-    mainClass: "narrow",
-  });
+  return settingsPage(c, user);
+});
+
+function settingsPage(c: Context<AppEnv>, user: User, pictureError?: { message: string; status: 400 | 413 | 415 | 429 }) {
+  return page(
+    c,
+    profileForm({
+      heading: "Settings",
+      intro: `Signed in as ${user.email}.`,
+      name: user.name,
+      next: "/settings?notice=saved",
+      submit: "Save",
+      digest: Boolean(user.email_digest),
+      picture: { user, error: pictureError?.message },
+    }),
+    { title: "Settings", mainClass: "narrow", status: pictureError?.status },
+  );
+}
+
+// The profile picture. The script on the settings page sends a cropped square and wants JSON
+// back; the plain form (no script) sends the file as it is and gets the page.
+app.post("/settings/picture", async (c) => {
+  const { user, redirect } = requireUser(c);
+  if (redirect) return redirect;
+  const wantsJson = (c.req.header("accept") ?? "").includes("application/json");
+  const fail = (message: string, status: 400 | 413 | 415 | 429) => (wantsJson ? c.json({ error: message }, status) : settingsPage(c, user, { message, status }));
+  if (!(await rateLimit(c.env.DB, `picture:${user.id}`, 20, 3600))) return fail("You've changed your picture a lot just now. Try again in a while.", 429);
+  const file = (await c.req.parseBody())["picture"];
+  if (!(file instanceof File)) return fail("Choose a picture first.", 400);
+  try {
+    await setAvatar(c.env, user.id, file);
+  } catch (err) {
+    if (err instanceof AvatarError) return fail(err.message, err.status);
+    throw err;
+  }
+  return wantsJson ? c.json({ ok: true, next: "/settings?notice=picture" }) : c.redirect("/settings?notice=picture");
+});
+
+app.post("/settings/picture/remove", async (c) => {
+  const { user, redirect } = requireUser(c);
+  if (redirect) return redirect;
+  await removeAvatar(c.env, user.id);
+  return c.redirect("/settings?notice=picture-removed");
+});
+
+// Pictures get a new name each time they change, so they can be cached for good. A banned
+// person's picture isn't shown (but kept, like their posts, in case of an unban).
+app.get("/avatars/:user/:avatar", async (c) => {
+  const userId = Number(c.req.param("user"));
+  const avatar = c.req.param("avatar");
+  const ok = await c.env.DB.prepare("SELECT 1 FROM users WHERE id = ? AND avatar = ? AND banned_at IS NULL").bind(userId, avatar).first();
+  if (!ok) return c.notFound();
+  const obj = await c.env.FILES.get(avatarKey(userId, avatar));
+  if (!obj) return c.notFound();
+  const headers = new Headers();
+  obj.writeHttpMetadata(headers);
+  headers.set("ETag", obj.httpEtag);
+  headers.set("Cache-Control", "public, max-age=31536000, immutable");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+  headers.set("Content-Length", String(obj.size));
+  return new Response(obj.body, { headers });
 });
 
 app.post("/settings", async (c) => {
@@ -852,7 +914,9 @@ admin.post("/users/:id", async (c) => {
   else if (action === "revoke_admin") await setAdmin(c.env.DB, userId, false, me);
   else if (action === "ban") await banUser(c.env.DB, userId, me, false);
   else if (action === "unban") await unbanUser(c.env.DB, userId, me);
-  else return c.text("Unknown action", 400);
+  else if (action === "remove_picture") {
+    if (await removeAvatar(c.env, userId)) await log(c.env.DB, { adminId: me.id, action: "remove_picture", userId }).run();
+  } else return c.text("Unknown action", 400);
   return c.redirect(safeNext(String(form["return"] ?? "/admin/users")));
 });
 

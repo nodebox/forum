@@ -1,6 +1,7 @@
 import { html, raw } from "hono/html";
 import type { Category, User } from "../db.ts";
 import { hueFor, initials } from "../util.ts";
+import { avatarUrl } from "../avatars.ts";
 import { icon } from "./icons.ts";
 
 export type Html = ReturnType<typeof html>;
@@ -53,7 +54,14 @@ export function categoryBadge(c: { id: number; slug: string; name: string; archi
   return html`<a class="cat" href="/c/${c.slug}">${categoryMark(c)}${c.name}</a>`;
 }
 
-export function avatar(user: { id: number; name: string }, size: "sm" | "md" = "md"): Html {
+const AVATAR_PX = { sm: 28, md: 40, lg: 96 } as const;
+
+/** The person's picture, or their initials on a colour of their own. Decorative: the name is always next to it. */
+export function avatar(user: { id: number; name: string; avatar?: string | null }, size: keyof typeof AVATAR_PX = "md"): Html {
+  if (user.avatar) {
+    const px = AVATAR_PX[size];
+    return html`<img class="avatar avatar-${size}" style="--hue:${hueFor(user.id)}" src="${avatarUrl(user.id, user.avatar)}" width="${px}" height="${px}" alt="" loading="lazy" decoding="async">`;
+  }
   return html`<span class="avatar avatar-${size}" style="--hue:${hueFor(user.id)}" aria-hidden="true">${initials(user.name)}</span>`;
 }
 

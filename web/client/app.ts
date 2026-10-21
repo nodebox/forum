@@ -457,3 +457,200 @@ function setupLightbox(box: HTMLDialogElement) {
     else if (dy > 80 && dy > Math.abs(dx)) box.close();
   });
 }
+
+// --- Profile picture ------------------------------------------------------------
+
+// Picking a file opens a square with a circle in it: drag (or use the arrow keys) to move
+// the picture, the slider, the scroll wheel or two fingers to zoom. "Use this picture" cuts
+// out the square around the circle at 256 by 256 and uploads that, so the server never
+// needs to resize, and big phone photos never leave the device.
+const PICTURE_PX = 256;
+const MAX_ZOOM = 6;
+const picture = $("[data-picture]");
+if (picture) setupPicture(picture);
+
+function setupPicture(section: HTMLElement) {
+  const form = $<HTMLFormElement>("[data-picture-form]", section)!;
+  const input = $<HTMLInputElement>("[data-picture-file]", section)!;
+  const row = $(".picture-row", section)!;
+  const errorBox = $("[data-picture-error]", section)!;
+  $("[data-picture-submit]", section)!.hidden = true;
+  input.required = false;
+
+  const showError = (message: string | null) => {
+    errorBox.textContent = message ?? "";
+    errorBox.hidden = !message;
+  };
+
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    showError(null);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } catch {
+      URL.revokeObjectURL(url);
+      input.value = "";
+      return showError("That file can't be read as a picture. Try a PNG or JPEG.");
+    }
+    openCropper(img, () => {
+      URL.revokeObjectURL(url);
+      input.value = "";
+    });
+  });
+
+  function openCropper(img: HTMLImageElement, done: () => void) {
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    const short = Math.min(w, h);
+    // What's in the circle is described in the picture's own pixels: its centre and the zoom
+    // (1 = the short side just fits). That keeps it right when the square changes size.
+    let zoom = 1;
+    let cx = w / 2;
+    let cy = h / 2;
+
+    img.className = "crop-img";
+    img.alt = "";
+    img.draggable = false;
+    img.width = w;
+    img.height = h;
+    const ring = el("div", { className: "crop-ring" });
+    const stage = el("div", { className: "crop-stage", tabIndex: 0 }, img, ring);
+    stage.setAttribute("role", "img");
+    stage.setAttribute("aria-label", "Your picture in the circle. Drag it, or use the arrow keys, to move it; plus and minus zoom.");
+    const slider = el("input", { type: "range", min: "1", max: String(MAX_ZOOM), step: "0.01", value: "1", id: "crop-zoom" });
+    const zoomField = el("div", { className: "crop-zoom" }, el("label", { htmlFor: "crop-zoom" }, "Zoom"), slider);
+    const use = el("button", { type: "button", className: "button button-primary" }, "Use this picture");
+    const cancel = el("button", { type: "button", className: "button button-quiet" }, "Cancel");
+    const crop = el("div", { className: "crop" }, stage, el("div", { className: "crop-controls" }, zoomField, el("div", { className: "crop-buttons" }, use, cancel)));
+    row.hidden = true;
+    row.after(crop);
+    stage.focus();
+
+    const size = () => stage.clientWidth;
+    const scale = () => (size() / short) * zoom;
+    function clamp() {
+      const half = short / zoom / 2;
+      cx = Math.min(Math.max(cx, half), w - half);
+      cy = Math.min(Math.max(cy, half), h - half);
+    }
+    function render() {
+      clamp();
+      const s = scale();
+      img.style.transform = `translate(${size() / 2 - cx * s}px, ${size() / 2 - cy * s}px) scale(${s})`;
+      slider.value = String(zoom);
+    }
+    /** Zoom to `next`, keeping the point under (px, py) in the square where it is. */
+    function zoomTo(next: number, px = size() / 2, py = size() / 2) {
+      const before = scale();
+      const ux = cx + (px - size() / 2) / before;
+      const uy = cy + (py - size() / 2) / before;
+      zoom = Math.min(Math.max(next, 1), MAX_ZOOM);
+      const after = scale();
+      cx = ux - (px - size() / 2) / after;
+      cy = uy - (py - size() / 2) / after;
+      render();
+    }
+    const move = (dx: number, dy: number) => {
+      const s = scale();
+      cx -= dx / s;
+      cy -= dy / s;
+      render();
+    };
+
+    // One finger or the mouse moves; two fingers pinch.
+    const pointers = new Map<number, { x: number; y: number }>();
+    let pinch: { distance: number; zoom: number } | null = null;
+    const spread = () => {
+      const [a, b] = [...pointers.values()];
+      return Math.hypot(a!.x - b!.x, a!.y - b!.y);
+    };
+    stage.addEventListener("pointerdown", (e) => {
+      stage.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) pinch = { distance: spread(), zoom };
+      stage.classList.add("dragging");
+    });
+    stage.addEventListener("pointermove", (e) => {
+      const last = pointers.get(e.pointerId);
+      if (!last) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && pointers.size === 2) {
+        const box = stage.getBoundingClientRect();
+        const [a, b] = [...pointers.values()];
+        zoomTo(pinch.zoom * (spread() / pinch.distance), (a!.x + b!.x) / 2 - box.left, (a!.y + b!.y) / 2 - box.top);
+      } else if (pointers.size === 1) {
+        move(e.clientX - last.x, e.clientY - last.y);
+      }
+    });
+    const release = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 0) stage.classList.remove("dragging");
+    };
+    stage.addEventListener("pointerup", release);
+    stage.addEventListener("pointercancel", release);
+    stage.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const box = stage.getBoundingClientRect();
+      zoomTo(zoom * Math.exp(-e.deltaY * 0.002), e.clientX - box.left, e.clientY - box.top);
+    }, { passive: false });
+    stage.addEventListener("keydown", (e) => {
+      const step = e.shiftKey ? 32 : 8;
+      if (e.key === "ArrowLeft") move(step, 0);
+      else if (e.key === "ArrowRight") move(-step, 0);
+      else if (e.key === "ArrowUp") move(0, step);
+      else if (e.key === "ArrowDown") move(0, -step);
+      else if (e.key === "+" || e.key === "=") zoomTo(zoom * 1.1);
+      else if (e.key === "-") zoomTo(zoom / 1.1);
+      else return;
+      e.preventDefault();
+    });
+    slider.addEventListener("input", () => zoomTo(Number(slider.value)));
+    const resize = new ResizeObserver(render);
+    resize.observe(stage);
+
+    function close() {
+      resize.disconnect();
+      crop.remove();
+      row.hidden = false;
+      done();
+    }
+    cancel.addEventListener("click", () => {
+      close();
+      $<HTMLElement>(".picture-pick", section)?.focus();
+    });
+
+    use.addEventListener("click", async () => {
+      const half = short / zoom / 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = PICTURE_PX;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, cx - half, cy - half, half * 2, half * 2, 0, 0, PICTURE_PX, PICTURE_PX);
+      // WebP where the browser can write it (Safari can't, and hands back PNG).
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.9));
+      if (!blob) return showError("Your browser couldn't make the picture. Try another one.");
+      const body = new FormData();
+      body.append("picture", new File([blob], blob.type === "image/webp" ? "picture.webp" : "picture.png", { type: blob.type }));
+      use.disabled = cancel.disabled = true;
+      use.textContent = "Saving…";
+      showError(null);
+      try {
+        const res = await fetch(form.action, { method: "POST", body, headers: { Accept: "application/json" } });
+        const data = (await res.json()) as { ok?: boolean; next?: string; error?: string };
+        if (res.ok && data.next) return location.assign(data.next);
+        showError(data.error ?? "That didn't work. Try again.");
+      } catch {
+        showError("That didn't work. Check your connection and try again.");
+      }
+      use.disabled = cancel.disabled = false;
+      use.textContent = "Use this picture";
+    });
+
+    render();
+  }
+}

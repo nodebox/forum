@@ -628,3 +628,91 @@ test("pictures, video and sound show in the post", async () => {
   assert.equal(tail.headers.get("content-range"), "bytes 450-499/500");
   assert.equal((await req("/files/tendervid01/old.mp4", { headers: { range: "bytes=900-" } })).status, 416);
 });
+
+test("profile pictures: upload, show, replace, remove, moderate", async () => {
+  const pia = await signIn("pia@example.com");
+  await req("/settings", { method: "POST", cookie: pia, body: form({ name: "Pia Picture", next: "/" }) });
+  let res = await req("/new", { method: "POST", cookie: pia, body: form({ title: "Pia's question", category: "questions", body: "How do I loop?" }) });
+  const topicPath = res.headers.get("location")!;
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+  const upload = (bytes: Uint8Array, name = "picture.png", json = true) => {
+    const fd = new FormData();
+    fd.append("picture", new File([bytes], name, { type: "image/png" }));
+    return req("/settings/picture", { method: "POST", cookie: pia, body: fd, headers: json ? { accept: "application/json" } : {} });
+  };
+  const current = async () => (await env.DB.prepare("SELECT id, avatar FROM users WHERE email = 'pia@example.com'").first()) as { id: number; avatar: string | null };
+
+  let html = await (await req("/settings", { cookie: pia })).text();
+  assert.match(html, /Profile picture/);
+  assert.match(html, /<span class="avatar avatar-lg"[^>]*>PP<\/span>/);
+  assert.doesNotMatch(html, /Remove<\/button>/);
+
+  // Only pictures, by their bytes: a renamed text file is refused, and so is anything over 1 MB.
+  res = await upload(new TextEncoder().encode("<svg onload=alert(1)>"), "evil.png");
+  assert.equal(res.status, 415);
+  res = await upload(new Uint8Array(1024 * 1024 + 1).fill(0xff), "big.png");
+  assert.equal(res.status, 413);
+  assert.equal((await current()).avatar, null);
+
+  res = await upload(pngBytes);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, next: "/settings?notice=picture" });
+  const first = await current();
+  assert.ok(first.avatar);
+  const firstUrl = `/avatars/${first.id}/${first.avatar}`;
+  const pic = await req(firstUrl);
+  assert.equal(pic.status, 200);
+  assert.equal(pic.headers.get("content-type"), "image/png");
+  assert.match(pic.headers.get("content-security-policy")!, /sandbox/);
+  assert.match(pic.headers.get("cache-control")!, /immutable/);
+
+  // It shows next to posts, in the header menu and on Settings, with a way to remove it.
+  html = await (await req(topicPath, { cookie: pia })).text();
+  assert.ok(html.split(`src="${firstUrl}"`).length - 1 >= 3, "post column, inline post head and header menu");
+  html = await (await req("/settings", { cookie: pia })).text();
+  assert.match(html, /Change picture/);
+  assert.match(html, /Remove<\/button>/);
+
+  // A new picture gets a new address; the old file is gone.
+  res = await upload(pngBytes, "again.png", false);
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get("location"), "/settings?notice=picture");
+  const second = await current();
+  assert.notEqual(second.avatar, first.avatar);
+  assert.equal((await req(firstUrl)).status, 404);
+  assert.equal(await env.FILES.head(`avatars/${first.id}/${first.avatar}`), null);
+
+  // Without the script, a refused file comes back on the Settings page.
+  res = await upload(new TextEncoder().encode("not a picture"), "notes.png", false);
+  assert.equal(res.status, 415);
+  assert.match(await res.text(), /Use a PNG, JPEG, WebP or GIF picture/);
+
+  // Removing brings the initials back.
+  res = await req("/settings/picture/remove", { method: "POST", cookie: pia });
+  assert.equal(res.headers.get("location"), "/settings?notice=picture-removed");
+  assert.equal((await current()).avatar, null);
+  assert.equal(await env.FILES.head(`avatars/${second.id}/${second.avatar}`), null);
+  html = await (await req(topicPath)).text();
+  assert.doesNotMatch(html, /\/avatars\//);
+
+  // Admins can remove someone's picture (logged); a ban hides it and an unban brings it back.
+  await upload(pngBytes);
+  const third = await current();
+  const thirdUrl = `/avatars/${third.id}/${third.avatar}`;
+  const mod = await signIn("mod@example.com");
+  await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE email = 'mod@example.com'").run();
+  await req(`/admin/users/${third.id}`, { method: "POST", cookie: mod, body: form({ action: "ban" }) });
+  assert.equal((await req(thirdUrl)).status, 404);
+  html = await (await req(topicPath, { cookie: mod })).text();
+  assert.doesNotMatch(html, /\/avatars\//);
+  await req(`/admin/users/${third.id}`, { method: "POST", cookie: mod, body: form({ action: "unban" }) });
+  assert.equal((await req(thirdUrl)).status, 200);
+  html = await (await req("/admin/users?q=pia", { cookie: mod })).text();
+  assert.match(html, /Remove picture/);
+  res = await req(`/admin/users/${third.id}`, { method: "POST", cookie: mod, body: form({ action: "remove_picture" }) });
+  assert.equal(res.status, 302);
+  assert.equal((await current()).avatar, null);
+  assert.equal((await req(thirdUrl)).status, 404);
+  html = await (await req("/admin/log", { cookie: mod })).text();
+  assert.match(html, /removed the profile picture of\s+Pia Picture/);
+});

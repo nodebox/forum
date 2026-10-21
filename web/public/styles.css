@@ -240,6 +240,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .avatar { display: inline-grid; place-items: center; border-radius: 50%; font-weight: 700; color: var(--navy); background: hsl(var(--hue) 45% 86%); flex: none; }
 .avatar-md { width: 40px; height: 40px; font-size: 15px; }
 .avatar-sm { width: 28px; height: 28px; font-size: 12px; }
+.avatar-lg { width: 96px; height: 96px; font-size: 40px; line-height: 44px; }
+/* A picture fills its circle; a transparent one shows the person's colour behind it. */
+img.avatar { display: block; object-fit: cover; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .avatar { background: hsl(var(--hue) 25% 26%); color: #e8eef6; } }
 :root[data-theme="dark"] .avatar { background: hsl(var(--hue) 25% 26%); color: #e8eef6; }
 
@@ -471,6 +474,26 @@ article.prose > h1 { margin-bottom: 24px; }
 
 .auth-card .lede { margin-bottom: 32px; }
 .stack { display: grid; gap: 16px; }
+
+/* Profile picture on Settings: preview on the left, buttons beside it; the crop square takes its place. */
+.picture { display: grid; gap: 8px; padding-bottom: 32px; margin-bottom: 32px; border-bottom: 1px solid var(--rule); }
+.picture-label { font-size: 16px; line-height: 24px; font-weight: 700; }
+.picture-row { display: flex; align-items: center; gap: 24px; }
+.picture-actions, .picture-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.picture-pick { position: relative; }
+.picture-pick:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+.picture [hidden] { display: none; }
+.crop { display: grid; gap: 16px; justify-items: start; }
+.crop-stage { position: relative; width: 288px; max-width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: var(--radius); background: var(--wash); cursor: grab; touch-action: none; user-select: none; }
+.crop-stage.dragging { cursor: grabbing; }
+.crop-img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+/* Everything outside the circle is dimmed; the thin ring marks its edge on any picture. */
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.9), 0 0 0 999px rgb(4 26 50 / 0.6); pointer-events: none; }
+.crop-controls { display: grid; gap: 16px; width: 288px; max-width: 100%; }
+.crop-zoom { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 16px; font-weight: 700; }
+.crop-zoom input { width: 100%; accent-color: var(--button); }
+.crop-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.user-cell { display: inline-flex; align-items: center; gap: 8px; }
 .stack-sm { display: grid; gap: 8px; }
 .or { display: flex; align-items: center; gap: 16px; color: var(--ink-3); font-size: 15px; font-weight: 700; margin: 24px 0; }
 .or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--rule); }

@@ -45,6 +45,16 @@ topics. Nothing is deleted: hidden posts stay in the database and show up at
 `/admin` (Spam, Removed), where they can be restored. Every action is in the
 log at `/admin/log`.
 
+## Profile pictures
+
+People set a picture in Settings. The browser crops it to the circle and uploads
+a 256 by 256 WebP (PNG in Safari), so the server only checks the bytes (PNG,
+JPEG, WebP or GIF, up to 1 MB) and stores it in R2 at
+`avatars/<user id>/<random id>`; `users.avatar` holds the id. A new picture gets
+a new id, so `/avatars/...` is cached for good and the old file is deleted.
+A banned person's picture isn't shown (but kept, in case of an unban). Admins
+can remove anyone's picture in Moderation > People; that is logged.
+
 ## Import from Tender
 
 ```sh

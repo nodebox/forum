@@ -69,25 +69,40 @@ function setupComposer(form: HTMLFormElement) {
   const fileInput = $<HTMLInputElement>("[data-file-input]", form)!;
   let pending = 0;
 
-  // Write / Preview tabs.
-  for (const tab of $$<HTMLButtonElement>("[data-tab]", form)) {
-    tab.addEventListener("click", async () => {
-      const showPreview = tab.dataset.tab === "preview";
-      for (const t of $$("[data-tab]", form)) t.setAttribute("aria-selected", String(t === tab));
-      textarea.hidden = showPreview;
-      preview.hidden = !showPreview;
-      if (!showPreview) return textarea.focus();
-      preview.textContent = "Rendering…";
-      try {
-        const res = await fetch("/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: textarea.value }) });
-        const data = (await res.json()) as { html?: string; error?: string };
-        preview.innerHTML = data.html || `<p class="muted">${data.error ?? "Nothing to preview yet."}</p>`;
-        if (!textarea.value.trim()) preview.innerHTML = `<p class="muted">Nothing to preview yet.</p>`;
-      } catch {
-        preview.textContent = "Couldn't render the preview.";
-      }
-    });
+  // Write / Preview tabs: one panel at a time, the text stays in the textarea.
+  let previewRun = 0;
+  async function showTab(name: "write" | "preview") {
+    const showPreview = name === "preview";
+    // Keep the box the same height, so the page doesn't jump.
+    if (showPreview && !textarea.hidden) preview.style.minHeight = `${textarea.offsetHeight}px`;
+    for (const t of $$("[data-tab]", form)) t.setAttribute("aria-selected", String(t.dataset.tab === name));
+    textarea.hidden = showPreview;
+    preview.hidden = !showPreview;
+    if (!showPreview) return textarea.focus();
+    const run = ++previewRun;
+    if (!textarea.value.trim()) {
+      preview.innerHTML = `<p class="muted">Nothing to preview yet.</p>`;
+      return;
+    }
+    preview.textContent = "Rendering…";
+    let html: string;
+    try {
+      const res = await fetch("/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body: textarea.value }) });
+      const data = (await res.json()) as { html?: string; error?: string };
+      html = data.html || `<p class="muted">${data.error ?? "Nothing to preview yet."}</p>`;
+    } catch {
+      html = `<p class="muted">Couldn't render the preview.</p>`;
+    }
+    // A later switch wins over a slow answer.
+    if (run === previewRun) preview.innerHTML = html;
   }
+  for (const tab of $$<HTMLButtonElement>("[data-tab]", form)) {
+    tab.addEventListener("click", () => showTab(tab.dataset.tab === "preview" ? "preview" : "write"));
+  }
+  // An empty message submitted from the Preview tab: go back so the browser can point at the textarea.
+  textarea.addEventListener("invalid", () => {
+    if (textarea.hidden) void showTab("write");
+  });
 
   function insertAtCursor(text: string) {
     const { selectionStart: start, selectionEnd: end, value } = textarea;
@@ -279,6 +294,7 @@ document.addEventListener("click", (e) => {
   const body = post && $<HTMLElement>("[data-post-body]", post);
   const textarea = $<HTMLTextAreaElement>("#reply textarea");
   if (!body || !textarea) return;
+  if (textarea.hidden) $<HTMLButtonElement>('#reply [data-tab="write"]')?.click();
   // Quote the selected part of this post, or else its first paragraph.
   const sel = getSelection();
   const picked = sel && !sel.isCollapsed && body.contains(sel.anchorNode) ? sel.toString() : ($("p", body)?.innerText ?? body.innerText);

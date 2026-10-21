@@ -19,8 +19,8 @@ export interface Bindings {
   LEGACY_HOSTS?: string;
   /** "true" while the forum waits for the move from Tender: members can read and sign in, only admins can write. */
   READ_ONLY?: string;
-  /** The banner shown while READ_ONLY is on; without it a default about the move from Tender. */
-  READ_ONLY_NOTICE?: string;
+  /** A banner on every page, about anything. While READ_ONLY is on and this is empty, a default about the move from Tender. */
+  FORUM_NOTICE?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   CF_ACCOUNT_ID?: string;

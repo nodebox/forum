@@ -105,12 +105,12 @@ app.use(async (c, next) => {
 // Before the move from Tender: reading, signing in and your own settings work; anything that
 // touches posts is for admins only, so the final import doesn't have to merge new content.
 const READ_ONLY_NOTICE = "The forum is read-only while we move it over from support.nodebox.net. Keep posting there until then.";
-/** READ_ONLY_NOTICE in wrangler.jsonc replaces the default wording. */
-const readOnlyNotice = (c: Context<AppEnv>) => c.env.READ_ONLY_NOTICE || READ_ONLY_NOTICE;
+/** FORUM_NOTICE in wrangler.jsonc, when set, is the banner on every page; while read-only it replaces the default wording. */
+const forumNotice = (c: Context<AppEnv>) => c.env.FORUM_NOTICE || (c.env.READ_ONLY === "true" ? READ_ONLY_NOTICE : null);
 app.use(async (c, next) => {
   if (c.env.READ_ONLY !== "true" || c.req.method === "GET" || c.req.method === "HEAD" || c.get("user")?.is_admin) return next();
   if (/^\/(signin|signout|unsubscribe|settings)(\/|$)/.test(c.req.path)) return next();
-  return page(c, messagePage("Read-only for now", readOnlyNotice(c), { href: "/", label: "Go to the forum" }), { title: "Read-only", status: 403, mainClass: "narrow" });
+  return page(c, messagePage("Read-only for now", forumNotice(c) ?? READ_ONLY_NOTICE, { href: "/", label: "Go to the forum" }), { title: "Read-only", status: 403, mainClass: "narrow" });
 });
 
 // The sidebar lists categories on every page; they rarely change, so each isolate keeps them for a minute.
@@ -143,7 +143,7 @@ async function page(
         description: opts.description,
         user: c.get("user"),
         notice: c.get("notice") ?? noticeFromQuery(url),
-        alert: c.env.READ_ONLY === "true" ? readOnlyNotice(c) : null,
+        alert: forumNotice(c),
         showBanner: !c.get("user") && getCookie(c, BANNER_COOKIE) !== "1" && !url.pathname.startsWith("/signin"),
         path: url.pathname + url.search,
         siteName: c.env.SITE_NAME,

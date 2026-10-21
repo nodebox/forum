@@ -33,11 +33,7 @@
     "CF_IMAGES_VARIANT_THUMB": "thumb",
     // "cloudflare" sends real mail; "log" prints sign-in links to the console (development).
     "MAILER": "cloudflare",
-    "MAIL_FROM": "forum@nodebox.net",
-    // "true" until the move from Tender: everyone reads and signs in, only admins write. Remove it to open the forum.
-    "READ_ONLY": "true",
-    // A banner on every page while it is set. Empty or absent: no banner (or the default read-only one).
-    "FORUM_NOTICE": "We're moving the forum over from support.nodebox.net today. It's read-only for a few hours while we bring over the last posts."
+    "MAIL_FROM": "forum@nodebox.net"
   }
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET

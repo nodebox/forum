@@ -312,11 +312,13 @@ img.avatar { display: block; object-fit: cover; }
 .mod-bar { margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .mod-bar .side-head { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
 .mod-bar form { display: flex; gap: 8px; flex-wrap: wrap; }
+.mod-actions { position: relative; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .mod-rename summary { list-style: none; cursor: pointer; }
 .mod-rename summary::-webkit-details-marker { display: none; }
-.mod-rename[open] { flex-basis: 100%; }
-.mod-rename-form { margin-top: 8px; }
-.mod-rename-form input[name="title"] { flex: 1 1 320px; min-width: 0; height: 40px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--field); padding: 0 8px; font: inherit; }
+.mod-rename[open] summary { background: var(--wash); }
+.mod-bar .mod-rename-form { position: absolute; left: 0; top: calc(100% + 8px); z-index: 5; width: min(588px, calc(100vw - 32px)); flex-wrap: nowrap; padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(4 26 50 / 16%); }
+.mod-rename-form input[name="title"] { flex: 1; min-width: 0; height: 40px; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--field); padding: 0 8px; font: inherit; }
+.mod-rename-form .button { flex: none; }
 
 .posts { display: grid; grid-template-columns: subgrid; list-style: none; margin: 0; padding: 0; }
 .post, .reply { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; padding: 32px 0; border-top: 1px solid var(--rule); scroll-margin-top: 24px; }

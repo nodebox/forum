@@ -41,19 +41,21 @@ export function postModMenu(post: PostRow, returnTo: string): Html {
 export function topicModBar(topic: TopicRow): Html {
   return html`<div class="mod-bar">
     <p class="side-head">${icon("shield", { size: 14 })}Moderation</p>
-    <form method="post" action="/admin/topics/${topic.id}">
-      <button class="button button-small button-quiet" name="action" value="${topic.pinned ? "unpin" : "pin"}">${icon("pin", { size: 14 })}${topic.pinned ? "Unpin" : "Pin"}</button>
-      <button class="button button-small button-quiet" name="action" value="${topic.locked ? "unlock" : "lock"}">${icon("lock", { size: 14 })}${topic.locked ? "Unlock" : "Lock"}</button>
-    </form>
-    <details class="mod-rename">
-      <summary class="button button-small button-quiet">${icon("pencil", { size: 14 })}Edit title</summary>
-      <form method="post" action="/admin/topics/${topic.id}" class="mod-rename-form">
-        <input type="hidden" name="action" value="rename">
-        <label for="topic-title" class="visually-hidden">Title</label>
-        <input id="topic-title" name="title" value="${topic.title}" required minlength="3" maxlength="160">
-        <button class="button button-small">Save title</button>
+    <div class="mod-actions">
+      <form method="post" action="/admin/topics/${topic.id}">
+        <button class="button button-small button-quiet" name="action" value="${topic.pinned ? "unpin" : "pin"}">${icon("pin", { size: 14 })}${topic.pinned ? "Unpin" : "Pin"}</button>
+        <button class="button button-small button-quiet" name="action" value="${topic.locked ? "unlock" : "lock"}">${icon("lock", { size: 14 })}${topic.locked ? "Unlock" : "Lock"}</button>
       </form>
-    </details>
+      <details class="mod-rename">
+        <summary class="button button-small button-quiet">${icon("pencil", { size: 14 })}Edit title</summary>
+        <form method="post" action="/admin/topics/${topic.id}" class="mod-rename-form">
+          <input type="hidden" name="action" value="rename">
+          <label for="topic-title" class="visually-hidden">Title</label>
+          <input id="topic-title" name="title" value="${topic.title}" required minlength="3" maxlength="160">
+          <button class="button button-small">Save title</button>
+        </form>
+      </details>
+    </div>
     ${topic.status !== "visible" ? html`<span class="tag tag-danger">Hidden topic: ${STATUS_LABEL[topic.status]}</span>` : ""}
   </div>`;
 }

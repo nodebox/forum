@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p client",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
     "import:tender": "node --disable-warning=ExperimentalWarning scripts/import-tender.ts",
+    "rewrite:links": "node --disable-warning=ExperimentalWarning scripts/rewrite-legacy-links.ts",
     "upload:attachments": "node --disable-warning=ExperimentalWarning scripts/upload-attachments.ts",
     "upload:attachments:remote": "CF_ACCOUNT_ID='op://NodeBox/NodeBox Forum/Cloudflare/CF_ACCOUNT_ID' CF_IMAGES_TOKEN='op://NodeBox/NodeBox Forum/Cloudflare/CF_IMAGES_TOKEN' op run -- npm run upload:attachments -- --remote",
     "admin": "node --disable-warning=ExperimentalWarning scripts/admin.ts"

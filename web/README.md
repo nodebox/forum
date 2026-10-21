@@ -64,6 +64,12 @@ are rewritten to the new topics, categories and files. A bare URL becomes an
 absolute link on `https://forum.nodebox.net`; set `FORUM_URL` to import for
 another host (`FORUM_URL=http://localhost:8787 npm run import:tender`).
 
+Posts from the first import predate that rewriting. `npm run rewrite:links -- --remote`
+reads production and writes `../data/rewrite-links.sql` plus a report,
+`../data/rewrite-links.md`; it changes nothing until you run the SQL with
+`wrangler d1 execute`. Links it can't place (private or deleted discussions)
+stay as they are.
+
 ## Tests
 
 `npm test` runs the importer against a small Tender fixture, and the app itself

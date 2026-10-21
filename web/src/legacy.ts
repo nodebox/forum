@@ -39,20 +39,23 @@ export async function resolveLegacyPath(db: D1Database, rawPath: string): Promis
   const number = tenderDiscussionNumber(path);
   if (number !== null) {
     // The exact old URL first; otherwise the same discussion number under another category or slug.
+    // Tender numbered per category, so a number in the old URL's own category wins over the same number elsewhere.
+    const category = /^\/discussions\/([^/]+)\/\d/.exec(path)?.[1] ?? "";
     const topic = await db
       .prepare(
         `SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id
          WHERE r.path = ?1 OR r.path GLOB '/discussions/*/' || ?2 || '-*' OR r.path GLOB '/discussions/*/' || ?2
-         ORDER BY r.path = ?1 DESC LIMIT 1`,
+         ORDER BY r.path = ?1 DESC, substr(r.path, 1, length(?3)) = ?3 DESC LIMIT 1`,
       )
-      .bind(path, String(number))
+      .bind(path, String(number), `/discussions/${category}/`)
       .first<{ id: number; slug: string }>();
     return topic ? `/t/${topic.id}/${topic.slug}` : null;
   }
   const permalink = tenderCategoryPermalink(path);
   if (permalink) {
     const category = await db.prepare("SELECT slug FROM categories WHERE slug = ?").bind(slugify(permalink, 40)).first<{ slug: string }>();
-    return category ? `/c/${category.slug}` : null;
+    // A category that didn't come over, such as the private Support one: the front page.
+    return category ? `/c/${category.slug}` : "/";
   }
   return null;
 }

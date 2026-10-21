@@ -197,11 +197,20 @@ test("legacy URLs redirect", async () => {
   // Moved or renamed since: the discussion number still finds it.
   assert.equal((await req("/discussions/questions/4711-renamed")).headers.get("location"), "/t/4711/old");
   assert.equal((await req("/discussions/problems/47110-other")).status, 404);
+  // Tender numbered discussions per category, so the same number can exist twice: the old URL's category decides.
+  await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at) VALUES (4712, 1, 900, 'Sign', 'sign', '2010', '2010'), (4713, 1, 900, 'Workshop', 'workshop', '2010', '2010')").run();
+  await env.DB.prepare("INSERT INTO legacy_redirects (path, topic_id) VALUES ('/discussions/show-your-work/574', 4712), ('/discussions/general-discussion/574', 4713)").run();
+  assert.equal((await req("/discussions/show-your-work/574-sign-node")).headers.get("location"), "/t/4712/sign");
+  assert.equal((await req("/discussions/general-discussion/574-workshop-material")).headers.get("location"), "/t/4713/workshop");
   // The old domain, once it points here: everything moves to the same page on the forum.
   const legacyEnv = { ...env, LEGACY_HOSTS: "support.nodebox.net" };
   const old = (p: string) => app.request("https://support.nodebox.net" + p, {}, legacyEnv);
   assert.equal((await old("/discussions/problems/4711-old")).headers.get("location"), "http://localhost/t/4711/old");
   assert.equal((await old("/discussions/questions")).headers.get("location"), "http://localhost/c/questions");
+  // A category that didn't come over (Tender's private Support) lands on the front page.
+  const gone = await req("/discussions/support/");
+  assert.equal(gone.status, 301);
+  assert.equal(gone.headers.get("location"), "/");
   assert.equal((await old("/search?q=svg")).headers.get("location"), "http://localhost/search?q=svg");
   assert.equal((await old("/")).headers.get("location"), "http://localhost/");
   assert.equal((await old("//evil.example/x")).headers.get("location"), "http://localhost//evil.example/x");

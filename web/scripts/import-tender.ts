@@ -42,7 +42,7 @@ export interface ImportStats {
 
 /** Where bare links to old discussions point after the import. FORUM_URL overrides it. */
 const DEFAULT_FORUM_URL = "https://forum.nodebox.net";
-/** The old forum's custom domain; *.tenderapp.com and the hosts in the export's own URLs count too. */
+/** The old forum's custom domain; nodebox.tenderapp.com and the hosts in the export's own URLs count too. */
 const LEGACY_HOSTS = ["support.nodebox.net"];
 /** Candidates for old links in a body: absolute URLs, and paths to old attachments and discussions. */
 const OLD_LINK = /https?:\/\/[^\s)"'<>\]]+|(?<![\w/.-])\/(?:assets|discussions)\/[^\s)"'<>\]]+/g;

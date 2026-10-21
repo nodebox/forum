@@ -1,4 +1,4 @@
-// Point links to the old forum (support.nodebox.net, *.tenderapp.com) inside posts
+// Point links to the old forum (support.nodebox.net, nodebox.tenderapp.com) inside posts
 // that are already in the forum straight at their new place. The first import ran
 // before the importer rewrote links, so those posts still rely on the old domain
 // redirecting.
@@ -40,6 +40,19 @@ export interface LinkChange {
 const LEGACY_HOSTS = ["support.nodebox.net"];
 const LINK = /https?:\/\/[^\s)"'<>\]]+|(?<![\w/.-])\/discussions\/[^\s)"'<>\]]+/g;
 
+/** The link behind Tender's r?go= redirector: plain or base64-encoded, and only when it is a whole http(s) URL. */
+export function outboundTarget(go: string | null): string | null {
+  if (!go) return null;
+  const isUrl = (s: string) => /^https?:\/\/[^\s]+$/i.test(s) && URL.canParse(s);
+  if (isUrl(go)) return go;
+  try {
+    const decoded = Buffer.from(go.replace(/ /g, "+").replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    return isUrl(decoded) ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
 /** A D1Database over an in-memory SQLite copy, enough for resolveLegacyPath. */
 function memoryD1(snap: LinkSnapshot): D1Database {
   const mem = new DatabaseSync(":memory:");
@@ -75,8 +88,8 @@ export async function planRewrite(
   async function target(u: URL, topicId: number): Promise<string | null> {
     const p = u.pathname;
     // Tender's outbound-link redirector: the link it stood for.
-    const go = u.searchParams.get("go");
-    if (/\/r\/?$/.test(p) && go && /^https?:\/\//i.test(go)) return go;
+    const go = /\/r\/?$/.test(p) ? outboundTarget(u.searchParams.get("go")) : null;
+    if (go) return go;
     // An attachment: the file it became, found through the comment it hung on.
     const assets = p.indexOf("/assets/");
     if (assets >= 0) {

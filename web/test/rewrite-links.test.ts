@@ -13,6 +13,9 @@ const body = [
   "http://support.nodebox.net/discussions/support/310-out-of-memory",
   "http://support.nodebox.net/discussions/nodebox-2-3/7170-complement-node",
   "https://github.com/discussions/show-your-work/574 and /discussions/show-your-work/550 (relative).",
+  "[Tender](http://tenderapp.com/) and https://help.tenderapp.com/kb/x stay.",
+  `[msi](http://support.nodebox.net/discussions/show-your-work/6331/r?go=${Buffer.from("https://github.com/nodebox/nodebox/releases/download/v3.0.53/NodeBox-3.0.53.msi").toString("base64")})`,
+  "http://support.nodebox.net/discussions/show-your-work/574/r?go=aHR0cH",
 ].join("\n");
 
 const snap: LinkSnapshot = {
@@ -53,6 +56,9 @@ test("points old links in posts at their new place", async () => {
       "http://support.nodebox.net/discussions/support/310-out-of-memory",
       "http://support.nodebox.net/discussions/nodebox-2-3/7170-complement-node",
       "https://github.com/discussions/show-your-work/574 and /t/40/fancy-star (relative).",
+      "[Tender](http://tenderapp.com/) and https://help.tenderapp.com/kb/x stay.",
+      "[msi](https://github.com/nodebox/nodebox/releases/download/v3.0.53/NodeBox-3.0.53.msi)",
+      "https://forum.nodebox.net/t/20/sign-node",
     ].join("\n"),
   );
   assert.deepEqual(

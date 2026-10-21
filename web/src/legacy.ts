@@ -5,10 +5,13 @@
 // and the slug changed when a discussion was moved or renamed; the number did not.
 import { slugify } from "./util.ts";
 
-/** Hosts the old forum answered on. LEGACY_HOSTS (comma-separated) adds custom domains such as support.nodebox.net. */
+/**
+ * Hosts the old forum answered on: nodebox.tenderapp.com, plus custom domains such as
+ * support.nodebox.net. tenderapp.com itself and help.tenderapp.com are Tender's own site.
+ */
 export function isLegacyHost(host: string, extra: Iterable<string> = []): boolean {
   const h = host.toLowerCase();
-  if (h === "tenderapp.com" || h.endsWith(".tenderapp.com")) return true;
+  if (h === "nodebox.tenderapp.com") return true;
   for (const e of extra) if (e.trim().toLowerCase() === h) return true;
   return false;
 }

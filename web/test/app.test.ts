@@ -36,6 +36,8 @@ before(async () => {
   env = { ...(proxy.env as object), MAILER: "log", PUBLIC_URL: "http://localhost", READ_ONLY: "false" };
   // A developer's .env may hold a real key; the tests only ever talk to the stand-in below.
   delete env.ANTHROPIC_API_KEY;
+  // Whatever banner production shows; the tests that want one set it themselves.
+  delete env.FORUM_NOTICE;
   const dir = path.join(import.meta.dirname, "../migrations");
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
     const schema = fs.readFileSync(path.join(dir, file), "utf8");

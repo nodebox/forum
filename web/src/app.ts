@@ -3,7 +3,7 @@ import { csrf } from "hono/csrf";
 import { HTTPException } from "hono/http-exception";
 import { getCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
-import { parseHosts, resolveLegacyPath } from "./legacy.ts";
+import { legacyFallback, parseHosts, resolveLegacyPath } from "./legacy.ts";
 import type { AppEnv } from "./env.ts";
 import {
   REACTIONS,
@@ -84,7 +84,9 @@ export const app = new Hono<AppEnv>();
 app.use(async (c, next) => {
   const url = new URL(c.req.url);
   if (!parseHosts(c.env.LEGACY_HOSTS).includes(url.hostname)) return next();
-  const target = (await resolveLegacyPath(c.env.DB, url.pathname)) ?? url.pathname + url.search;
+  // Tender's search took the same ?q= as ours; anything else without a counterpart gets the nearest page.
+  const target =
+    url.pathname.replace(/\/$/, "") === "/search" ? "/search" + url.search : ((await resolveLegacyPath(c.env.DB, url.pathname)) ?? legacyFallback(url.pathname));
   // Concatenated, not resolved with new URL(): a path like //evil.example would leave the site.
   return c.redirect(c.env.PUBLIC_URL.replace(/\/$/, "") + target, 301);
 });
@@ -863,7 +865,7 @@ app.route("/admin", admin);
 app.notFound(async (c) => {
   // Old Tender links: /discussions/<category>/<number>-<slug> and category pages.
   const path = new URL(c.req.url).pathname;
-  const legacy = path.startsWith("/discussions") ? await resolveLegacyPath(c.env.DB, path) : null;
+  const legacy = path.startsWith("/discussions") ? ((await resolveLegacyPath(c.env.DB, path)) ?? legacyFallback(path)) : null;
   if (legacy) return c.redirect(legacy, 301);
   return page(c, messagePage("Not found", "That page doesn't exist, or it moved.", { href: "/", label: "Go to the forum" }), {
     title: "Not found",

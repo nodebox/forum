@@ -196,7 +196,9 @@ test("legacy URLs redirect", async () => {
   assert.equal(res.headers.get("location"), "/t/4711/old");
   // Moved or renamed since: the discussion number still finds it.
   assert.equal((await req("/discussions/questions/4711-renamed")).headers.get("location"), "/t/4711/old");
-  assert.equal((await req("/discussions/questions/47110-other")).status, 404);
+  // Nothing on the forum for it: a search for the title words in the old URL, or the front page without any.
+  assert.equal((await req("/discussions/questions/47110-other-thing")).headers.get("location"), "/search?q=other%20thing");
+  assert.equal((await req("/discussions/questions/47110")).headers.get("location"), "/");
   // Tender numbered discussions per category, so the same number can exist twice: the old URL's category decides.
   await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at) VALUES (4712, 1, 900, 'Sign', 'sign', '2010', '2010'), (4713, 1, 900, 'Workshop', 'workshop', '2010', '2010')").run();
   await env.DB.prepare("INSERT INTO legacy_redirects (path, topic_id) VALUES ('/discussions/show-your-work/574', 4712), ('/discussions/general-discussion/574', 4713)").run();
@@ -218,7 +220,8 @@ test("legacy URLs redirect", async () => {
   assert.equal(gone.headers.get("location"), "/");
   assert.equal((await old("/search?q=svg")).headers.get("location"), "http://localhost/search?q=svg");
   assert.equal((await old("/")).headers.get("location"), "http://localhost/");
-  assert.equal((await old("//evil.example/x")).headers.get("location"), "http://localhost//evil.example/x");
+  assert.equal((await old("/kb/basics/getting_started")).headers.get("location"), "http://localhost/search?q=getting%20started");
+  assert.equal((await old("//evil.example/x")).headers.get("location"), "http://localhost/");
 });
 
 test("watching, grouped digests, hearts, your topics", async () => {

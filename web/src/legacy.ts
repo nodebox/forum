@@ -63,3 +63,18 @@ export async function resolveLegacyPath(db: D1Database, rawPath: string): Promis
   }
   return null;
 }
+
+/**
+ * Where to send an old path that has no counterpart: a search for the title words
+ * in a discussion or knowledge-base URL, otherwise the front page.
+ */
+export function legacyFallback(rawPath: string): string {
+  const slug =
+    /^\/discussions\/(?:[^/]+\/)?\d+-([^/]+)/.exec(rawPath)?.[1] ?? /^\/kb\/(?:[^/]+\/)*([^/]+?)\/?$/.exec(rawPath)?.[1] ?? "";
+  let words = slug;
+  try {
+    words = decodeURIComponent(slug);
+  } catch {}
+  words = words.replace(/[-_+]+/g, " ").trim();
+  return words ? `/search?q=${encodeURIComponent(words)}` : "/";
+}

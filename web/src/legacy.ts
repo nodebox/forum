@@ -34,7 +34,8 @@ export function tenderCategoryPermalink(path: string): string | null {
  * (knowledge-base articles, private or deleted discussions, user pages).
  */
 export async function resolveLegacyPath(db: D1Database, rawPath: string): Promise<string | null> {
-  const path = rawPath.replace(/\/+$/, "") || "/";
+  // Paths below a discussion (its attachments, Tender's r?go= link redirector) stand for the discussion.
+  const path = rawPath.replace(/^(\/discussions\/[^/]+\/\d[^/]*)\/.*/, "$1").replace(/\/+$/, "") || "/";
   if (path === "/" || path === "/discussions") return "/";
   const number = tenderDiscussionNumber(path);
   if (number !== null) {
@@ -43,12 +44,15 @@ export async function resolveLegacyPath(db: D1Database, rawPath: string): Promis
     const category = /^\/discussions\/([^/]+)\/\d/.exec(path)?.[1] ?? "";
     const topic = await db
       .prepare(
-        `SELECT t.id, t.slug FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id
+        `SELECT t.id, t.slug, r.path = ?1 OR substr(r.path, 1, length(?3)) = ?3 AS own FROM legacy_redirects r JOIN topics t ON t.id = r.topic_id
          WHERE r.path = ?1 OR r.path GLOB '/discussions/*/' || ?2 || '-*' OR r.path GLOB '/discussions/*/' || ?2
-         ORDER BY r.path = ?1 DESC, substr(r.path, 1, length(?3)) = ?3 DESC LIMIT 1`,
+         ORDER BY r.path = ?1 DESC, own DESC LIMIT 1`,
       )
       .bind(path, String(number), `/discussions/${category}/`)
-      .first<{ id: number; slug: string }>();
+      .first<{ id: number; slug: string; own: number }>();
+    if (topic?.own) return `/t/${topic.id}/${topic.slug}`;
+    // Another category's number only when the old URL's category came over; a dropped one (private Support) goes to the front page.
+    if (category && !(await db.prepare("SELECT 1 FROM categories WHERE slug = ?").bind(slugify(category, 40)).first())) return "/";
     return topic ? `/t/${topic.id}/${topic.slug}` : null;
   }
   const permalink = tenderCategoryPermalink(path);

@@ -196,12 +196,17 @@ test("legacy URLs redirect", async () => {
   assert.equal(res.headers.get("location"), "/t/4711/old");
   // Moved or renamed since: the discussion number still finds it.
   assert.equal((await req("/discussions/questions/4711-renamed")).headers.get("location"), "/t/4711/old");
-  assert.equal((await req("/discussions/problems/47110-other")).status, 404);
+  assert.equal((await req("/discussions/questions/47110-other")).status, 404);
   // Tender numbered discussions per category, so the same number can exist twice: the old URL's category decides.
   await env.DB.prepare("INSERT INTO topics (id, category_id, user_id, title, slug, created_at, last_post_at) VALUES (4712, 1, 900, 'Sign', 'sign', '2010', '2010'), (4713, 1, 900, 'Workshop', 'workshop', '2010', '2010')").run();
   await env.DB.prepare("INSERT INTO legacy_redirects (path, topic_id) VALUES ('/discussions/show-your-work/574', 4712), ('/discussions/general-discussion/574', 4713)").run();
   assert.equal((await req("/discussions/show-your-work/574-sign-node")).headers.get("location"), "/t/4712/sign");
   assert.equal((await req("/discussions/general-discussion/574-workshop-material")).headers.get("location"), "/t/4713/workshop");
+  // A discussion in a category that didn't come over (private Support) doesn't borrow another category's number.
+  assert.equal((await req("/discussions/support/574-out-of-memory")).headers.get("location"), "/");
+  // Paths below a discussion (attachments, Tender's r?go= link redirector) land on its topic.
+  assert.equal((await req("/discussions/show-your-work/574/assets/abc123/sign.ndbx.zip")).headers.get("location"), "/t/4712/sign");
+  assert.equal((await req("/discussions/show-your-work/574/r?go=aHR0cHM6Ly9ub2RlYm94Lm5ldA%3D%3D")).headers.get("location"), "/t/4712/sign");
   // The old domain, once it points here: everything moves to the same page on the forum.
   const legacyEnv = { ...env, LEGACY_HOSTS: "support.nodebox.net" };
   const old = (p: string) => app.request("https://support.nodebox.net" + p, {}, legacyEnv);

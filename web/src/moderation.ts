@@ -1,5 +1,5 @@
 import type { PostStatus, User } from "./db.ts";
-import { now } from "./util.ts";
+import { now, slugify } from "./util.ts";
 
 /** Reasons offered when removing a post: one per rule of the acceptable use policy (/aup). */
 export const REMOVAL_REASONS = [
@@ -126,6 +126,14 @@ export async function setTopicFlag(db: D1Database, topicId: number, flag: "pinne
   await db.batch([
     db.prepare(`UPDATE topics SET ${flag} = ? WHERE id = ?`).bind(on ? 1 : 0, topicId),
     log(db, { adminId: admin.id, action, topicId }),
+  ]);
+}
+
+/** Give a topic a new title. The slug follows it; links with the old slug redirect to the new one. */
+export async function renameTopic(db: D1Database, topicId: number, title: string, oldTitle: string, admin: User): Promise<void> {
+  await db.batch([
+    db.prepare("UPDATE topics SET title = ?, slug = ? WHERE id = ?").bind(title, slugify(title), topicId),
+    log(db, { adminId: admin.id, action: "rename", topicId, reason: `Was “${oldTitle}”` }),
   ]);
 }
 

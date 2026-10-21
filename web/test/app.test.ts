@@ -174,6 +174,36 @@ test("sign in, post, react, moderate", async () => {
   assert.match(await (await req("/admin/log", { cookie: bob })).text(), /removed a post/);
 });
 
+test("admins can edit a topic's title; old links follow it", async () => {
+  const carol = await signIn("carol@example.com");
+  let res = await req("/new", { method: "POST", cookie: carol, body: form({ title: "Zebra gradients”", category: "questions", body: "How do stripes work?" }) });
+  const oldPath = res.headers.get("location")!;
+  const topicId = Number(/\/t\/(\d+)/.exec(oldPath)![1]);
+  const rename = (cookie: string, title: string) => req(`/admin/topics/${topicId}`, { method: "POST", cookie, body: form({ action: "rename", title }) });
+
+  // Authors and other members can't, and the edit form is for admins only.
+  assert.equal((await rename(carol, "Hacked")).status, 403);
+  assert.doesNotMatch(await (await req(oldPath, { cookie: carol })).text(), /Edit title/);
+
+  await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE email = 'carol@example.com'").run();
+  assert.match(await (await req(oldPath, { cookie: carol })).text(), /Edit title/);
+  assert.equal((await rename(carol, " x ")).status, 400, "too short");
+  res = await rename(carol, "  Okapi   gradients ");
+  assert.equal(res.status, 302);
+  const newPath = res.headers.get("location")!;
+  assert.equal(newPath, `/t/${topicId}/okapi-gradients`);
+  assert.match(await (await req(newPath)).text(), /<h1>Okapi gradients<\/h1>/);
+
+  // The old slug redirects, search finds the new title only, and feeds show it.
+  res = await req(oldPath);
+  assert.equal(res.status, 301);
+  assert.equal(res.headers.get("location"), newPath);
+  assert.match(await (await req("/search?q=okapi")).text(), /Okapi gradients/);
+  assert.doesNotMatch(await (await req("/search?q=zebra")).text(), /gradients/);
+  assert.match(await (await req("/feeds/topics")).text(), /Okapi gradients/);
+  assert.match(await (await req("/admin/log", { cookie: carol })).text(), /renamed a topic.*Was “Zebra gradients”/s);
+});
+
 test("cross-site posts are rejected", async () => {
   const res = await app.request(ORIGIN + "/signout", { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/x-www-form-urlencoded" } }, env);
   assert.equal(res.status, 403);

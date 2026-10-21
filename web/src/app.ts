@@ -48,7 +48,7 @@ import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts"
 import { sendMail } from "./mailer.ts";
 import { feedPosts, feedSearch, feedTopics, lastModified, renderFeed, type Feed } from "./feeds.ts";
 import { isEmail, normalizeEmail, safeNext } from "./util.ts";
-import { banUser, log, moderationQueue, recentLog, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
+import { banUser, log, moderationQueue, recentLog, renameTopic, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
 import { logPage, queuePage, usersPage } from "./views/admin.ts";
 import { layout, type Html } from "./views/layout.ts";
 import {
@@ -891,7 +891,14 @@ admin.post("/topics/:id", async (c) => {
   const me = c.get("user")!;
   const topic = await getTopic(c.env.DB, Number(c.req.param("id")), true);
   if (!topic) return c.notFound();
-  const action = String((await c.req.parseBody())["action"] ?? "");
+  const form = await c.req.parseBody();
+  const action = String(form["action"] ?? "");
+  if (action === "rename") {
+    const title = String(form["title"] ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+    if (title.length < 3) return c.text("The title needs a few more words.", 400);
+    if (title !== topic.title) await renameTopic(c.env.DB, topic.id, title, topic.title, me);
+    return c.redirect(topicUrl((await getTopic(c.env.DB, topic.id, true))!));
+  }
   const flags: Record<string, ["pinned" | "locked", boolean]> = { pin: ["pinned", true], unpin: ["pinned", false], lock: ["locked", true], unlock: ["locked", false] };
   const flag = flags[action];
   if (!flag) return c.text("Unknown action", 400);

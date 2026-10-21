@@ -33,7 +33,9 @@
     "CF_IMAGES_VARIANT_THUMB": "thumb",
     // "cloudflare" sends real mail; "log" prints sign-in links to the console (development).
     "MAILER": "cloudflare",
-    "MAIL_FROM": "forum@nodebox.net"
+    "MAIL_FROM": "forum@nodebox.net",
+    // A banner on every page while it is set; remove it for no banner.
+    "FORUM_NOTICE": "The new NodeBox forum is live! Everything from support.nodebox.net moved here: sign in with the same email to pick up your old posts. Something not working? Write to forum-support@nodebox.net."
   }
   // Secrets (wrangler secret put, or .dev.vars locally):
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET

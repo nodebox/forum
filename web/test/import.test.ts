@@ -144,6 +144,61 @@ test("points links to the old forum at their new place", () => {
   );
 });
 
+test("tops up a live forum with what is new in the export", () => {
+  const src = fixture();
+  const db = new DatabaseSync(":memory:");
+  db.exec(forumSchema);
+  db.exec(convert(src).statements.join("\n"));
+  // Since the first import: Bob's spam was restored by an admin, someone signed up on the forum and started a topic.
+  db.exec(`UPDATE posts SET status = 'visible', moderation_reason = NULL WHERE topic_id = 100 AND tender_number = 4;
+    INSERT INTO users (email, name, created_at) VALUES ('dora@example.com', 'Dora', '2026-10-20');
+    INSERT INTO topics (category_id, user_id, title, slug, created_at, last_post_at) VALUES (10, (SELECT id FROM users WHERE email = 'dora@example.com'), 'Hi', 'hi', '2026-10-20', '2026-10-20');
+    INSERT INTO posts (topic_id, user_id, body, created_at) VALUES ((SELECT max(id) FROM topics), (SELECT id FROM users WHERE email = 'dora@example.com'), 'Hello', '2026-10-20');`);
+  const before = db.prepare("SELECT max(id) AS n FROM posts").get() as any;
+
+  // New on Tender: a reply by Dora (same email) with a file, and a new discussion by a new person.
+  src.exec(`
+    INSERT INTO users (id, name, email, created_at, raw) VALUES (6, 'Dora T', 'Dora@example.com', '2026-10-19', '{}'), (7, 'Eve', 'eve@example.com', '2026-10-19', '{}');
+    INSERT INTO discussions (id, category_id, title, state, public, user_id, html_href, created_at, raw, fetched_at) VALUES
+      (107, 10, 'New question', 'open', 1, 7, 'https://support.nodebox.net/discussions/problems/107-new-question', '2026-10-19T09:00:00Z', '{}', '2026-10-19');
+    INSERT INTO comments (discussion_id, number, user_id, body, internal, created_at, raw) VALUES
+      (100, 8, 6, 'Still crashes, see 107: https://support.nodebox.net/discussions/problems/107-new-question', 0, '2026-10-19T08:00:00Z', '{}'),
+      (107, 1, 7, 'How do I?', 0, '2026-10-19T09:00:00Z', '{}');
+    INSERT INTO attachments (download_path, download_url, discussion_id, comment_number, filename, content_type, size, raw) VALUES
+      ('/assets/jkl/log.txt', 'https://s3.example/log.txt', 100, 8, 'log.txt', 'text/plain', 10, '{}');`);
+
+  const live = {
+    users: db.prepare("SELECT id, email, name FROM users").all() as any[],
+    topics: db.prepare("SELECT id, tender_id FROM topics").all() as any[],
+    posts: db.prepare("SELECT id, topic_id, tender_number FROM posts").all() as any[],
+    attachments: (db.prepare("SELECT id FROM attachments").all() as any[]).map((r) => r.id),
+  };
+  const { statements, stats } = convert(src, undefined, undefined, live);
+  db.exec("PRAGMA foreign_keys = ON;");
+  db.exec(statements.join("\n"));
+
+  assert.deepEqual({ topics: stats.topics, posts: stats.posts, users: stats.users, attachments: stats.attachments }, { topics: 1, posts: 2, users: 1, attachments: 1 });
+  const reply = db.prepare("SELECT p.id, p.body, u.email FROM posts p JOIN users u ON u.id = p.user_id WHERE topic_id = 100 AND tender_number = 8").get() as any;
+  assert.equal(reply.email, "dora@example.com", "matched to the account she made on the forum");
+  assert.ok(reply.id > before.n, "new posts get ids after everything already there");
+  assert.match(reply.body, /https:\/\/forum\.nodebox\.net\/t\/107\/new-question/);
+  assert.equal((db.prepare("SELECT status FROM posts WHERE topic_id = 100 AND tender_number = 4").get() as any).status, "visible", "moderation since the first import stays");
+  assert.deepEqual({ ...(db.prepare("SELECT post_count, last_post_at FROM topics WHERE id = 100").get() as any) }, { post_count: 6, last_post_at: "2026-10-19T08:00:00.000Z" });
+  assert.equal((db.prepare("SELECT topic_count FROM categories WHERE id = 10").get() as any).topic_count, 4);
+  assert.equal((db.prepare("SELECT post_id FROM attachments WHERE filename = 'log.txt'").get() as any).post_id, reply.id);
+  assert.equal((db.prepare("SELECT topic_id FROM legacy_redirects WHERE path = '/discussions/problems/107-new-question'").get() as any).topic_id, 107);
+
+  // Running it again adds nothing.
+  const again = convert(src, undefined, undefined, {
+    users: db.prepare("SELECT id, email, name FROM users").all() as any[],
+    topics: db.prepare("SELECT id, tender_id FROM topics").all() as any[],
+    posts: db.prepare("SELECT id, topic_id, tender_number FROM posts").all() as any[],
+    attachments: (db.prepare("SELECT id FROM attachments").all() as any[]).map((r) => r.id),
+  });
+  assert.deepEqual({ topics: again.stats.topics, posts: again.stats.posts, users: again.stats.users, attachments: again.stats.attachments }, { topics: 0, posts: 0, users: 0, attachments: 0 });
+  db.exec(again.statements.join("\n"));
+});
+
 test("works without spam verdicts", () => {
   const db = fixture();
   db.exec("DROP VIEW spam_excluded; DROP TABLE spam_verdicts; DROP TABLE spam_decisions;");

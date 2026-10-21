@@ -5,8 +5,14 @@
 //   npm run import:tender -- in.sqlite out.sql
 //   npx wrangler d1 execute nodebox-forum --local --file ../data/import.sql
 //
-// The output expects an empty, freshly migrated database: the plan is to import
-// once more into a new database at cutover, before the forum opens.
+// The output expects an empty, freshly migrated database. To add what is new in
+// the export to the live forum instead (the final catch-up at the move):
+//
+//   npm run import:tender -- --top-up          # reads production D1 through wrangler, writes ../data/top-up.sql
+//   npx wrangler d1 execute nodebox-forum --remote --file ../data/top-up.sql
+//
+// A top-up only adds: new users, topics, posts, attachments and old URLs. What is
+// already in the forum stays as it is, including moderation and claimed accounts.
 //
 // What comes over: public categories; open/assigned/resolved public discussions;
 // comments that aren't internal notes or system messages; the users who wrote at least one visible post (deduplicated on
@@ -17,6 +23,7 @@
 // imported with status 'spam': hidden, but admins can restore them.
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { isLegacyHost, tenderCategoryPermalink, tenderDiscussionNumber } from "../src/legacy.ts";
@@ -50,9 +57,9 @@ export function sql(v: unknown): string {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-function insert(table: string, row: Record<string, unknown>): string {
+function insert(table: string, row: Record<string, unknown>, orIgnore = false): string {
   const cols = Object.keys(row);
-  return `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map((c) => sql(row[c])).join(", ")});`;
+  return `INSERT${orIgnore ? " OR IGNORE" : ""} INTO ${table} (${cols.join(", ")}) VALUES (${cols.map((c) => sql(row[c])).join(", ")});`;
 }
 
 export function slugify(text: string, max = 60): string {
@@ -112,7 +119,24 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", forumUrl = DEFAULT_FORUM_URL): { statements: string[]; stats: ImportStats } {
+/**
+ * What the live forum already holds, for a top-up import: only what is new in
+ * the export is added, and everything already there (and what people did with
+ * it since: claimed accounts, moderation) stays as it is.
+ */
+export interface LiveState {
+  users: { id: number; email: string | null; name: string }[];
+  topics: { id: number; tender_id: number | null }[];
+  posts: { id: number; topic_id: number; tender_number: number | null }[];
+  attachments: string[];
+}
+
+export function convert(
+  src: DatabaseSync,
+  imagesPrefix = "nodebox-forum-",
+  forumUrl = DEFAULT_FORUM_URL,
+  live?: LiveState,
+): { statements: string[]; stats: ImportStats } {
   const out: string[] = [];
   const stats: ImportStats = { categories: 0, users: 0, topics: 0, posts: 0, spamTopics: 0, spamPosts: 0, attachments: 0, redirects: 0, skippedDiscussions: 0 };
 
@@ -141,7 +165,7 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
     usedSlugs.add(slug);
     catIds.add(c.id);
     categoryPathByPermalink.set(slugify(c.permalink || c.name, 40), `/c/${slug}`);
-    out.push(insert("categories", { id: c.id, slug, name: c.name, description: c.summary ?? "", position: i, topic_count: 0, tender_id: c.id }));
+    out.push(insert("categories", { id: c.id, slug, name: c.name, description: c.summary ?? "", position: i, topic_count: 0, tender_id: c.id }, Boolean(live)));
     stats.categories++;
   });
 
@@ -152,11 +176,22 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
   const users = new Map<number, { id: number; name: string; email: string | null; created_at: string; tender_id: number | null }>();
   const placeholders = new Map<string, number>(); // author_name -> id, for authors with neither user nor email
   let nextPlaceholder = PLACEHOLDER_BASE;
+  // Top-up: people already in the forum keep their row, matched on email first, then on their Tender id.
+  const liveUserIds = new Set<number>();
+  for (const u of live?.users ?? []) {
+    liveUserIds.add(u.id);
+    const email = u.email?.trim().toLowerCase();
+    if (email) userByEmail.set(email, u.id);
+    else if (u.id >= PLACEHOLDER_BASE) placeholders.set(u.name, u.id);
+    // Accounts made on the forum get ids above the placeholders too.
+    if (u.id >= nextPlaceholder) nextPlaceholder = u.id + 1;
+  }
 
   function userFor(userId: number | null, authorName: string | null, authorEmail: string | null, when: string | null): number {
     const tu = userId !== null ? tenderUsers.get(userId) : undefined;
     const email = ((tu?.email ?? authorEmail) as string | null)?.trim().toLowerCase() || null;
     if (email && userByEmail.has(email)) return userByEmail.get(email)!;
+    if (tu && liveUserIds.has(tu.id)) return tu.id;
     if (!email && tu && users.has(tu.id)) return tu.id;
     const name = (tu?.name ?? authorName ?? (email ? email.split("@")[0] : null) ?? "Former member").toString().trim().slice(0, 60) || "Former member";
     let id: number;
@@ -225,7 +260,10 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
     visible: number;
     last: { at: string; user: number } | null;
   }[] = [];
-  let postId = 0;
+  const livePostIds = new Map<string, number>();
+  for (const p of live?.posts ?? []) if (p.tender_number !== null) livePostIds.set(`${p.topic_id}:${p.tender_number}`, p.id);
+  const livePostIdSet = new Set(livePostIds.values());
+  let postId = (live?.posts ?? []).reduce((max, p) => Math.max(max, p.id), 0);
   for (const { d, comments, slug } of kept) {
     const files = attachmentsStmt.all(d.id) as any[];
     const fileUrlByPath = new Map<string, string>();
@@ -273,10 +311,10 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
       const reason = topicSpam ?? spamComments.get(`${d.id}:${c.number}`) ?? null;
       const status = reason ? "spam" : "visible";
       const created = iso(c.created_at) ?? iso(d.created_at)!;
-      postId++;
-      postIdByNumber.set(c.number, postId);
+      const id = livePostIds.get(`${d.id}:${c.number}`) ?? ++postId;
+      postIdByNumber.set(c.number, id);
       postRows.push({
-        id: postId,
+        id,
         topic_id: d.id,
         user_id: userId,
         body: rewrite(c.body ?? (c.formatted_body ? htmlToText(c.formatted_body) : "")),
@@ -298,18 +336,31 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
   // Only people with a visible post come over. What such a person leaves behind
   // is hidden spam, and it stays in the export: those posts are dropped, and a
   // topic with no post left is dropped with them.
+  const liveTopics = new Map((live?.topics ?? []).map((t) => [t.id, t]));
+  const liveAttachments = new Set(live?.attachments ?? []);
+  const touchedTopics: number[] = [];
   for (const { d, slug, topicStatus, postRows: allPosts, files, postIdByNumber, visible, last } of built) {
-    const postRows = allPosts.filter((r) => visibleAuthors.has(r.user_id as number));
+    const postRows = allPosts.filter((r) => visibleAuthors.has(r.user_id as number) || liveUserIds.has(r.user_id as number));
     if (postRows.length === 0) {
       stats.skippedDiscussions++;
       continue;
     }
     const keptPostIds = new Set(postRows.map((r) => r.id));
+    const liveTopic = liveTopics.get(d.id);
+    if (liveTopic && liveTopic.tender_id !== d.id) {
+      throw new Error(`Tender discussion ${d.id} has the same id as topic ${d.id}, which was started on the forum. Not importing over it.`);
+    }
+    // Top-up: posts already in the forum stay as they are, including how they were moderated since.
+    const newPosts = postRows.filter((r) => !livePostIdSet.has(r.id as number));
+    if (liveTopic) {
+      if (newPosts.length === 0) continue;
+      touchedTopics.push(d.id);
+    }
     // The topic's author is whoever wrote its first post.
     const authorId = postRows[0]!.user_id as number;
-    stats.spamPosts += postRows.filter((r) => r.status !== "visible").length;
+    stats.spamPosts += newPosts.filter((r) => r.status !== "visible").length;
     const created = iso(d.created_at) ?? (postRows[0]!.created_at as string);
-    out.push(
+    if (!liveTopic) out.push(
       insert("topics", {
         id: d.id,
         category_id: d.category_id,
@@ -324,11 +375,12 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
         tender_id: d.id,
       }),
     );
-    for (const row of postRows) out.push(insert("posts", row));
+    for (const row of newPosts) out.push(insert("posts", row));
     for (const f of files) {
       const pid = postIdByNumber.get(f.comment_number);
       if (pid === undefined || !keptPostIds.has(pid)) continue; // attachment on an internal note or a dropped post
       const id = attachmentId(d.id, f.comment_number, f.download_path);
+      if (liveAttachments.has(id)) continue;
       const type = f.content_type || "application/octet-stream";
       out.push(
         insert("attachments", {
@@ -347,37 +399,73 @@ export function convert(src: DatabaseSync, imagesPrefix = "nodebox-forum-", foru
       );
       stats.attachments++;
     }
-    if (d.html_href) {
+    if (d.html_href && !liveTopic) {
       out.push(insert("legacy_redirects", { path: new URL(d.html_href).pathname.replace(/\/$/, ""), topic_id: d.id }));
       stats.redirects++;
     }
+    stats.posts += newPosts.length;
+    if (liveTopic) continue;
     stats.topics++;
-    stats.posts += postRows.length;
     if (topicStatus === "spam") stats.spamTopics++;
     else categoryCounts.set(d.category_id, (categoryCounts.get(d.category_id) ?? 0) + 1);
   }
 
-  for (const [catId, n] of categoryCounts) out.push(`UPDATE categories SET topic_count = ${n} WHERE id = ${catId};`);
+  if (live) {
+    // Same as moderation.ts recountTopic, so the counts agree with what admins changed since.
+    for (const id of touchedTopics) {
+      out.push(
+        `UPDATE topics SET post_count = (SELECT count(*) FROM posts WHERE topic_id = ${id} AND status = 'visible'), ` +
+          `last_post_at = coalesce((SELECT max(created_at) FROM posts WHERE topic_id = ${id} AND status = 'visible'), created_at), ` +
+          `last_post_user_id = coalesce((SELECT user_id FROM posts WHERE topic_id = ${id} AND status = 'visible' ORDER BY created_at DESC, id DESC LIMIT 1), user_id) ` +
+          `WHERE id = ${id};`,
+      );
+    }
+    out.push("UPDATE categories SET topic_count = (SELECT count(*) FROM topics WHERE category_id = categories.id AND status = 'visible');");
+  } else for (const [catId, n] of categoryCounts) out.push(`UPDATE categories SET topic_count = ${n} WHERE id = ${catId};`);
 
   // Users go first so foreign keys resolve.
   const userStatements = [...users.values()]
-    .filter((u) => visibleAuthors.has(u.id))
+    .filter((u) => visibleAuthors.has(u.id) && !liveUserIds.has(u.id))
     .map((u) => insert("users", { id: u.id, email: u.email, name: u.name, created_at: u.created_at, tender_id: u.tender_id }));
   stats.users = userStatements.length;
   return { statements: [...userStatements, ...out], stats };
 }
 
+/** What the forum's D1 database holds now, read through wrangler. */
+export function readLive(where: "--remote" | "--local", cwd: string): LiveState {
+  const query = <T>(sql: string): T[] => {
+    const out = execFileSync("npx", ["wrangler", "d1", "execute", "nodebox-forum", where, "--json", "--command", sql], {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 1 << 30,
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    return (JSON.parse(out) as { results: T[] }[])[0]!.results;
+  };
+  return {
+    users: query("SELECT id, email, name FROM users"),
+    topics: query("SELECT id, tender_id FROM topics"),
+    posts: query("SELECT id, topic_id, tender_number FROM posts"),
+    attachments: query<{ id: string }>("SELECT id FROM attachments").map((r) => r.id),
+  };
+}
+
 // CLI
 if (import.meta.url === `file://${process.argv[1]}`) {
   const here = path.dirname(new URL(import.meta.url).pathname);
-  const input = process.argv[2] ?? path.join(here, "../../data/forum.sqlite");
-  const output = process.argv[3] ?? path.join(here, "../../data/import.sql");
+  const args = process.argv.slice(2);
+  const topUp = args.includes("--top-up") ? "--remote" : args.includes("--top-up-local") ? "--local" : null;
+  const [inArg, outArg] = args.filter((a) => !a.startsWith("--"));
+  const input = inArg ?? path.join(here, "../../data/forum.sqlite");
+  const output = outArg ?? path.join(here, topUp ? "../../data/top-up.sql" : "../../data/import.sql");
   if (!fs.existsSync(input)) {
     console.error(`No export at ${input}. Run the Tender export first (npm run export in the repo root).`);
     process.exit(1);
   }
   const db = new DatabaseSync(input, { readOnly: true });
-  const { statements, stats } = convert(db, undefined, (process.env.FORUM_URL ?? DEFAULT_FORUM_URL).replace(/\/$/, ""));
+  const live = topUp ? readLive(topUp, path.join(here, "..")) : undefined;
+  if (live) console.log(`Forum now: ${live.users.length} users, ${live.topics.length} topics, ${live.posts.length} posts, ${live.attachments.length} attachments`);
+  const { statements, stats } = convert(db, undefined, (process.env.FORUM_URL ?? DEFAULT_FORUM_URL).replace(/\/$/, ""), live);
   fs.writeFileSync(output, statements.join("\n") + "\n");
   console.log(`Wrote ${statements.length} statements to ${output}`);
   console.table(stats);

@@ -59,6 +59,25 @@ requests; it holds no Cloudflare credentials.
 everyone can read and sign in, only admins can post, and every page says so.
 At the switch, do the final import first, then remove `READ_ONLY` and push.
 
+## The move, step by step
+
+On the machine with `data/`, from the repo root:
+
+1. Point `support.nodebox.net` at the Worker (below). That also stops people
+   posting on Tender, so the export after it is the last one.
+2. `npm run export -- --refresh` fetches what changed on Tender since the last run.
+3. `npm run spam -- classify` checks only what it hasn't seen yet. Then
+   `npm run spam -- review`, fill in the rows without a decision, and
+   `npm run spam -- apply data/spam-review.csv`.
+4. Note the time (`date -u +%FT%TZ`) for D1 Time Travel, in case the next
+   step has to be undone.
+5. In `web/`: `npm run import:tender -- --top-up` reads production D1 and
+   writes `../data/top-up.sql` with only what is new. Check the counts it
+   prints, then `npx wrangler d1 execute nodebox-forum --remote --file ../data/top-up.sql`.
+6. `npm run upload:attachments:remote` uploads the new files; files already
+   there are skipped.
+7. Remove `READ_ONLY` from `wrangler.jsonc`, commit and push.
+
 ## The old domain
 
 Once Tender is switched off, point `support.nodebox.net` at the Worker so old

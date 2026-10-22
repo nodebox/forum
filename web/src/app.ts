@@ -42,7 +42,7 @@ import {
   type SignInResult,
 } from "./auth.ts";
 import { UploadError, fileUrl, imageUrls, isImage, parseRange, playable, settleAttachments, storeUpload } from "./files.ts";
-import { refusalReason, refusePost } from "./spamfilter.ts";
+import { checkFilter, refusalReason, refusePost } from "./spamfilter.ts";
 import { AvatarError, avatarKey, removeAvatar, setAvatar } from "./avatars.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
@@ -867,6 +867,12 @@ admin.get("/", async (c) => {
   const view = c.req.query("view") === "removed" ? "removed" : "spam";
   const p = pageNumber(c);
   return page(c, queuePage(view, await moderationQueue(c.env.DB, view, 100, (p - 1) * 100)), { title: "Moderation" });
+});
+
+// Run the spam filter on a sample post with the Worker's key, and show the result above the queue.
+admin.post("/spam-filter", async (c) => {
+  const check = await checkFilter(c.env);
+  return page(c, queuePage("spam", await moderationQueue(c.env.DB, "spam", 100, 0), check), { title: "Moderation" });
 });
 
 admin.post("/posts/:id", async (c) => {

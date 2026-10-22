@@ -456,6 +456,40 @@ test("the spam filter refuses spam from new accounts", async () => {
   }
 });
 
+test("admins can test the spam filter from /admin", async () => {
+  const api = fakeSpamApi();
+  try {
+    const admin = await signIn("alice@example.com");
+    await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE email = 'alice@example.com'").run();
+    const member = await signIn("henk@example.com");
+    // Give back the two sign-ins, so later tests stay under the per-IP sign-in limit.
+    await env.DB.prepare("UPDATE rate_limits SET count = count - 2 WHERE key = 'signin-ip:local'").run();
+    const check = () => req("/admin/spam-filter", { method: "POST", cookie: admin });
+
+    assert.match(await (await req("/admin", { cookie: admin })).text(), /Test spam filter/);
+    assert.equal((await req("/admin/spam-filter", { method: "POST", cookie: member })).status, 403);
+
+    delete env.ANTHROPIC_API_KEY;
+    assert.match(await (await check()).text(), /spam filter is off/);
+    assert.equal(api.calls.length, 0);
+
+    env.ANTHROPIC_API_KEY = "test-key";
+    const ok = await (await check()).text();
+    assert.match(ok, /spam filter is working.*spam, confidence 0\.97.*casino advert/s);
+    assert.equal(api.calls.length, 1);
+
+    // A failing API is reported on the page, and no "filter unavailable" email goes out.
+    const start = logged.length;
+    globalThis.fetch = (async () => new Response("invalid x-api-key", { status: 401 })) as typeof fetch;
+    assert.match(await (await check()).text(), /spam filter is not working.*HTTP 401: invalid x-api-key/s);
+    assert.equal(logged.slice(start).filter((m) => m.includes("the spam filter is unavailable")).length, 0);
+    assert.equal(await env.DB.prepare("SELECT 1 FROM posts WHERE body LIKE '%free spins%'").first(), null, "the sample is never stored");
+  } finally {
+    delete env.ANTHROPIC_API_KEY;
+    api.restore();
+  }
+});
+
 test("search, unanswered and archived categories", async () => {
   await env.DB.prepare("INSERT INTO categories (id, slug, name, archived) VALUES (2, 'nodebox-1', 'NodeBox 1', 1)").run();
   const zoe = await signIn("zoe@example.com");

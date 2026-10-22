@@ -64,36 +64,71 @@ export async function refusalReason(env: Bindings, user: User, post: PostToCheck
   const visible = await env.DB.prepare("SELECT count(*) AS n FROM posts WHERE user_id = ? AND status = 'visible'").bind(user.id).first<{ n: number }>();
   if ((visible?.n ?? 0) >= TRUSTED_AFTER_POSTS) return null;
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        system: SYSTEM,
-        output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-        messages: [
-          {
-            role: "user",
-            content: `${post.opensTopic ? "New topic" : "Reply in the topic"}: ${post.topicTitle}\n\n${post.body.slice(0, 6000)}`,
-          },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { content: { type: string; text?: string }[] };
-    const out = JSON.parse(data.content.flatMap((b) => (b.type === "text" && b.text ? [b.text] : [])).join("")) as {
-      verdict: string;
-      confidence: number;
-      reason: string;
-    };
-    return out.verdict === "spam" && Number(out.confidence) >= REFUSE_AT ? String(out.reason).slice(0, 280) : null;
+    const out = await ask(env.ANTHROPIC_API_KEY, post);
+    return out.verdict === "spam" && out.confidence >= REFUSE_AT ? out.reason.slice(0, 280) : null;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`spam filter unavailable, publishing: ${message}`);
     await alertAdmins(env, message);
     return null;
+  }
+}
+
+interface Verdict {
+  verdict: string;
+  confidence: number;
+  reason: string;
+}
+
+/** Ask Claude about one post. Throws when the API can't be reached or answers with an error. */
+async function ask(apiKey: string, post: PostToCheck): Promise<Verdict> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 1024,
+      system: SYSTEM,
+      output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
+      messages: [
+        {
+          role: "user",
+          content: `${post.opensTopic ? "New topic" : "Reply in the topic"}: ${post.topicTitle}\n\n${post.body.slice(0, 6000)}`,
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const data = (await res.json()) as { content: { type: string; text?: string }[] };
+  const out = JSON.parse(data.content.flatMap((b) => (b.type === "text" && b.text ? [b.text] : [])).join("")) as Verdict;
+  return { verdict: String(out.verdict), confidence: Number(out.confidence), reason: String(out.reason) };
+}
+
+export type FilterCheck =
+  | { status: "off" }
+  | { status: "working"; verdict: string; confidence: number; reason: string; ms: number }
+  | { status: "failing"; error: string; ms: number };
+
+/** A spam post that any working filter refuses. */
+const SAMPLE: PostToCheck = {
+  topicTitle: "Best online casino bonus 2026",
+  body: "Get 500 free spins today!!! Register at our casino and claim your bonus, no deposit needed. Click here: https://casino-bonus.example",
+  opensTopic: true,
+};
+
+/**
+ * Send a sample spam post through the filter with the Worker's own key, for
+ * the admin page. Nothing is stored and nobody is emailed.
+ */
+export async function checkFilter(env: Bindings): Promise<FilterCheck> {
+  if (!env.ANTHROPIC_API_KEY) return { status: "off" };
+  const start = Date.now();
+  try {
+    const out = await ask(env.ANTHROPIC_API_KEY, SAMPLE);
+    return { status: "working", ...out, ms: Date.now() - start };
+  } catch (err) {
+    return { status: "failing", error: err instanceof Error ? err.message : String(err), ms: Date.now() - start };
   }
 }
 

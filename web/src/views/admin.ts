@@ -2,6 +2,7 @@ import { html } from "hono/html";
 import type { PostRow, TopicRow } from "../db.ts";
 import { excerpt } from "../markdown.ts";
 import { REMOVAL_REASONS, type AdminUserRow, type LogRow, type QueueItem } from "../moderation.ts";
+import type { FilterCheck } from "../spamfilter.ts";
 import { timeAgo } from "../util.ts";
 import { avatar, type Html } from "./layout.ts";
 import { icon } from "./icons.ts";
@@ -75,12 +76,31 @@ function queueMeta(i: QueueItem, view: "spam" | "removed"): string {
   return `by ${i.author_name}${i.author_banned ? " (banned)" : ""} · posted ${timeAgo(i.created_at)} · ${who}${when}${why}`;
 }
 
-export function queuePage(view: "spam" | "removed", items: QueueItem[]): Html {
+/** The spam filter's state after an admin pressed "Test spam filter". */
+function filterCheckResult(check: FilterCheck): Html {
+  if (check.status === "off") {
+    return html`<p class="filter-check failing" role="status">The spam filter is off: the Worker has no ANTHROPIC_API_KEY. Posts from new accounts are published without a check.</p>`;
+  }
+  if (check.status === "failing") {
+    return html`<p class="filter-check failing" role="status">The spam filter is not working. The API answered: ${check.error}</p>`;
+  }
+  const verdict = `${check.verdict}, confidence ${check.confidence.toFixed(2)}`;
+  return html`<p class="filter-check working" role="status">The spam filter is working. A sample casino post came back as ${verdict} in ${check.ms} ms: ${check.reason}</p>`;
+}
+
+export function queuePage(view: "spam" | "removed", items: QueueItem[], check?: FilterCheck): Html {
   return html`<header class="main-head"><div class="main-head-text"><h1>Moderation</h1></div></header>
     ${tabs(view)}
     <p class="muted">${view === "spam"
-      ? "Posts marked as spam, by an admin or by the spam filter during the import. They are hidden from everyone but admins. Restore anything that was caught by mistake."
+      ? "Posts marked as spam, by an admin or by the spam filter. They are hidden from everyone but admins. Restore anything that was caught by mistake."
       : "Posts removed for breaking the acceptable use policy. Only admins see them."}</p>
+    ${view === "spam"
+      ? html`<form method="post" action="/admin/spam-filter" class="filter-check-form">
+          <button class="button button-small">Test spam filter</button>
+          <span class="muted small">Sends a sample spam post to Claude with the forum's key. Nothing is stored.</span>
+        </form>
+        ${check ? filterCheckResult(check) : ""}`
+      : ""}
     ${items.length === 0
       ? html`<p class="empty">Nothing here.</p>`
       : html`<ul class="queue">

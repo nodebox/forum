@@ -519,6 +519,10 @@ article.prose > h1 { margin-bottom: 24px; }
 .mod-panel form + form { border-top: 1px solid var(--rule); padding-top: 16px; }
 .mod-hidden { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
 .tabs + .muted { margin-top: 24px; margin-bottom: 24px; }
+.filter-check-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 16px; }
+.filter-check { font-weight: 700; margin-bottom: 24px; overflow-wrap: anywhere; }
+.filter-check.working { color: var(--success); }
+.filter-check.failing { color: var(--danger); }
 .queue { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
 .queue-item { display: flex; gap: 24px; align-items: flex-start; padding: 16px 0; border-bottom: 1px solid var(--rule); }
 .queue-main { flex: 1; min-width: 0; }

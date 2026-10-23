@@ -88,7 +88,8 @@ export interface ReactionSummary {
 }
 
 /** The fixed set of reactions. Order is display order. */
-export const REACTIONS = ["👍", "❤️", "😄", "🎉", "🤔", "👀"] as const;
+/** Only the heart (Frederik, 2026-10-23). Rows with other emoji from before stay in the table, unshown. */
+export const REACTIONS = ["❤️"] as const;
 
 const TOPIC_SELECT = `
   SELECT t.*, u.name AS author_name, lu.name AS last_post_user_name,

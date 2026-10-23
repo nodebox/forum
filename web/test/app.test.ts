@@ -138,11 +138,14 @@ test("sign in, post, react, moderate", async () => {
 
   // Reactions toggle.
   const firstPost = Number(/id="post-(\d+)"/.exec(html)![1]);
-  let r = await (await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "🎉" }) })).json() as any;
-  assert.deepEqual(r.reactions.map((x: any) => [x.emoji, x.count, x.mine]), [["🎉", 1, true]]);
-  r = await (await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "🎉" }) })).json() as any;
+  let r = await (await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "❤️" }) })).json() as any;
+  assert.deepEqual(r.reactions.map((x: any) => [x.emoji, x.count, x.mine]), [["❤️", 1, true]]);
+  r = await (await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "❤️" }) })).json() as any;
   assert.equal(r.reactions.length, 0);
   assert.equal((await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "💩" }) })).status, 400);
+  // Only the heart: the emoji reactions are gone.
+  assert.equal((await req(`/posts/${firstPost}/react`, { method: "POST", cookie: old, headers: { accept: "application/json" }, body: form({ emoji: "🎉" }) })).status, 400);
+  assert.doesNotMatch(await (await req(topicPath, { cookie: old })).text(), /React|🎉/);
 
   // Non-admins can't moderate.
   assert.equal((await req("/admin", { cookie: alice })).status, 403);

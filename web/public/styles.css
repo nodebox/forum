@@ -423,14 +423,11 @@ article.prose > h1 { margin-bottom: 24px; }
 /* Reactions and hearts */
 .reactions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; }
 .reaction { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius); background: transparent; cursor: pointer; color: var(--ink-3); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.reaction .emoji { font-size: 18px; }
 .reaction:hover { background: var(--wash); color: var(--ink); }
 .reaction.has { color: var(--ink-2); }
 .reaction.mine { background: var(--wash); color: var(--ink); }
 .reaction-count:empty { display: none; }
 .reaction.heart .reaction-count:not(:empty) + .heart-label { display: none; }
-.reactions:not(:focus-within) .reaction:not(.has):not(.heart) { display: none; }
-.reactions:focus-within .react-toggle { display: none; }
 .reaction.heart, .reaction.heart.mine { background: transparent; }
 .reaction.heart:hover { color: var(--heart); background: var(--wash); }
 .reaction.heart.has { color: var(--heart); }
@@ -587,8 +584,4 @@ article.prose > h1 { margin-bottom: 24px; }
   .table .small { display: none; }
 }
 
-@media (hover: none) {
-  .reactions .reaction:not(.has):not(.heart) { display: inline-flex; }
-  .reactions .react-toggle { display: none; }
-}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

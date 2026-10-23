@@ -1,5 +1,5 @@
 import { html, raw } from "hono/html";
-import { REACTIONS, canEditPost, editableUntil, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
+import { canEditPost, editableUntil, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
 import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
 import { excerpt, mediaPlayer } from "../markdown.ts";
@@ -193,23 +193,13 @@ function reactionBar(post: PostRow, reactions: ReactionSummary[], user: User | n
   const byEmoji = new Map(reactions.map((r) => [r.emoji, r]));
   const needsSignin = user ? "" : raw("data-needs-signin");
   const heart = byEmoji.get(HEART);
-  // The heart is the one-click "this helped" (as on Discourse). Emoji people used follow; the rest open from React.
+  // The heart is the one-click "this helped" (as on Discourse), and the only reaction.
   return html`<form class="reactions" method="post" action="/posts/${post.id}/react" data-reactions>
     <button type="submit" name="emoji" value="${HEART}"
       class="reaction heart${heart ? " has" : ""}${heart?.mine ? " mine" : ""}"
       aria-pressed="${heart?.mine ? "true" : "false"}" title="${heart ? `${heart.names} liked this` : "Like this post"}" ${needsSignin}>
       ${icon("heart", { size: 18, class: "heart-icon" })}<span class="reaction-count">${heart ? heart.count : ""}</span><span class="heart-label">Like</span>
     </button>
-    ${REACTIONS.filter((e) => e !== HEART).map((emoji) => {
-      const r = byEmoji.get(emoji);
-      const label = r ? `${r.names} reacted ${emoji}` : `React ${emoji}`;
-      return html`<button type="submit" name="emoji" value="${emoji}"
-        class="reaction${r ? " has" : ""}${r?.mine ? " mine" : ""}"
-        aria-pressed="${r?.mine ? "true" : "false"}" title="${label}" ${needsSignin}>
-        <span class="emoji">${emoji}</span><span class="reaction-count">${r ? r.count : ""}</span>
-      </button>`;
-    })}
-    <button type="button" class="action react-toggle" title="Add a reaction">${icon("smile-plus", { size: 18 })}<span>React</span></button>
   </form>`;
 }
 

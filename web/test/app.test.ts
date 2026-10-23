@@ -204,6 +204,96 @@ test("admins can edit a topic's title; old links follow it", async () => {
   assert.match(await (await req("/admin/log", { cookie: carol })).text(), /renamed a topic.*Was “Zebra gradients”/s);
 });
 
+test("authors can edit their own posts and titles for 24 hours", async () => {
+  const hana = await signIn("hana@example.com");
+  const ivan = await signIn("ivan@example.com");
+  // All tests sign in from one address; keep these two from using up its hourly limit.
+  await env.DB.prepare("UPDATE rate_limits SET count = count - 2 WHERE key = 'signin-ip:local'").run();
+  let res = await req("/new", { method: "POST", cookie: hana, body: form({ title: "Lion gradients", category: "questions", body: "How do manes work?" }) });
+  const topicPath = res.headers.get("location")!;
+  const topicId = Number(/\/t\/(\d+)/.exec(topicPath)![1]);
+  const opening = (await env.DB.prepare("SELECT id FROM posts WHERE topic_id = ?").bind(topicId).first()).id;
+  res = await req(`/t/${topicId}/reply`, { method: "POST", cookie: ivan, body: form({ body: "Which version?" }) });
+  const reply = Number(/#post-(\d+)/.exec(res.headers.get("location")!)![1]);
+  const edit = (cookie: string, id: number, fields: Record<string, string>) => req(`/posts/${id}/edit`, { method: "POST", cookie, body: form(fields) });
+
+  // The author sees Edit on their own post only; the opening post's form has the title.
+  let html = await (await req(topicPath, { cookie: hana })).text();
+  assert.match(html, new RegExp(`href="/posts/${opening}/edit"`));
+  assert.doesNotMatch(html, new RegExp(`href="/posts/${reply}/edit"`));
+  assert.doesNotMatch(await (await req(topicPath)).text(), /\/edit"/, "not when signed out");
+  assert.match(await (await req(`/posts/${opening}/edit`, { cookie: hana })).text(), /name="title" [^>]*value="Lion gradients"/);
+  assert.doesNotMatch(await (await req(`/posts/${reply}/edit`, { cookie: ivan })).text(), /name="title"/);
+
+  // Nobody else can edit it, admins included (they have Edit title).
+  assert.equal((await edit(ivan, opening, { title: "Hacked", body: "Hacked" })).status, 404);
+  assert.equal((await req(`/posts/${opening}/edit`, { cookie: ivan })).status, 404);
+
+  assert.equal((await edit(hana, opening, { title: "x", body: "Still here" })).status, 400, "title too short");
+  assert.equal((await edit(hana, opening, { title: "Lion gradients", body: "  " })).status, 400, "empty body");
+  res = await edit(hana, opening, { title: "Tiger  gradients", body: "How do stripes work? I use NodeBox 3.2." });
+  assert.equal(res.status, 302);
+  const newPath = `/t/${topicId}/tiger-gradients`;
+  assert.equal(res.headers.get("location"), `${newPath}#post-${opening}`);
+  html = await (await req(newPath)).text();
+  assert.match(html, /<h1>Tiger gradients<\/h1>/);
+  assert.match(html, /I use NodeBox 3\.2/);
+  assert.match(html, /class="post-edited"/);
+  assert.equal((await req(topicPath)).headers.get("location"), newPath, "the old slug redirects");
+  assert.match(await (await req("/search?q=stripes")).text(), /Tiger gradients/);
+  assert.equal((await env.DB.prepare("SELECT edited_at FROM posts WHERE id = ?").bind(reply).first()).edited_at, null);
+
+  // Replies edit their text only; a title field sent anyway is ignored.
+  assert.equal((await edit(ivan, reply, { title: "Hacked", body: "Which version of NodeBox?" })).status, 302);
+  assert.match(await (await req(newPath)).text(), /<h1>Tiger gradients<\/h1>.*Which version of NodeBox\?/s);
+
+  // After 24 hours the post is locked: no button, and the form and the save are refused.
+  await env.DB.prepare("UPDATE posts SET created_at = ? WHERE id = ?").bind(new Date(Date.now() - 25 * 3600 * 1000).toISOString(), reply).run();
+  assert.doesNotMatch(await (await req(newPath, { cookie: ivan })).text(), new RegExp(`href="/posts/${reply}/edit"`));
+  assert.equal((await req(`/posts/${reply}/edit`, { cookie: ivan })).status, 403);
+  assert.equal((await edit(ivan, reply, { body: "Changed my mind" })).status, 403);
+
+  // So is anything in a locked topic, unless you're an admin.
+  await env.DB.prepare("UPDATE topics SET locked = 1 WHERE id = ?").bind(topicId).run();
+  assert.equal((await edit(hana, opening, { title: "Tiger gradients", body: "Locked now" })).status, 403);
+  await env.DB.prepare("UPDATE users SET is_admin = 1 WHERE email = 'hana@example.com'").run();
+  assert.equal((await edit(hana, opening, { title: "Tiger gradients", body: "Admins may" })).status, 302);
+});
+
+test("the spam filter checks edits from new accounts", async () => {
+  const api = fakeSpamApi();
+  env.ANTHROPIC_API_KEY = "test-key";
+  try {
+    const jack = await signIn("jack@example.com");
+    await env.DB.prepare("UPDATE rate_limits SET count = count - 1 WHERE key = 'signin-ip:local'").run();
+    let res = await req("/new", { method: "POST", cookie: jack, body: form({ title: "Fonts", category: "questions", body: "Which fonts work?" }) });
+    const topicId = Number(/\/t\/(\d+)/.exec(res.headers.get("location")!)![1]);
+    const post = (await env.DB.prepare("SELECT id FROM posts WHERE topic_id = ?").bind(topicId).first()).id;
+    const edit = (body: string) => req(`/posts/${post}/edit`, { method: "POST", cookie: jack, body: form({ title: "Fonts", body }) });
+
+    // A refused edit isn't saved: the post keeps its text, and the log says why.
+    res = await edit("Which fonts work? Also: best casino here");
+    assert.equal(res.status, 422);
+    assert.match(await res.text(), /edit was not saved/);
+    assert.equal((await env.DB.prepare("SELECT body, edited_at FROM posts WHERE id = ?").bind(post).first()).body, "Which fonts work?");
+    assert.ok(await env.DB.prepare("SELECT 1 FROM moderation_log WHERE post_id = ? AND action = 'edit_refused' AND reason = 'Spam filter: casino advert'").bind(post).first());
+
+    const calls = api.calls.length;
+    assert.equal((await edit("Which fonts work in NodeBox 3?")).status, 302);
+    assert.equal(api.calls.length, calls + 1, "a harmless edit is checked and saved");
+    assert.equal((await env.DB.prepare("SELECT body FROM posts WHERE id = ?").bind(post).first()).body, "Which fonts work in NodeBox 3?");
+
+    // Refused edits count towards the ban, like refused posts.
+    assert.equal((await edit("casino two")).status, 422);
+    assert.equal((await env.DB.prepare("SELECT banned_at FROM users WHERE email = 'jack@example.com'").first()).banned_at, null);
+    assert.equal((await edit("casino three")).status, 422);
+    assert.ok((await env.DB.prepare("SELECT banned_at FROM users WHERE email = 'jack@example.com'").first()).banned_at);
+  } finally {
+    delete env.ANTHROPIC_API_KEY;
+    api.restore();
+  }
+});
+
 test("cross-site posts are rejected", async () => {
   const res = await app.request(ORIGIN + "/signout", { method: "POST", headers: { origin: "https://evil.example", "content-type": "application/x-www-form-urlencoded" } }, env);
   assert.equal(res.status, 403);

@@ -174,6 +174,7 @@ const ACTION_LABEL: Record<string, string> = {
   lock: "locked a topic",
   unlock: "unlocked a topic",
   rename: "renamed a topic",
+  edit_refused: "refused an edit to a post",
 };
 
 export function logPage(rows: LogRow[]): Html {

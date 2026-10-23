@@ -332,6 +332,7 @@ img.avatar { display: block; object-fit: cover; }
 .post-author { font-weight: 700; }
 .post-time { font-size: 15px; color: var(--ink-3); text-decoration: none; }
 .post-time:hover { color: var(--ink); text-decoration: underline; }
+.post-edited { font-size: 15px; color: var(--ink-3); }
 .post-hidden .prose, .post-hidden .post-avatar { opacity: 0.6; }
 .topic-foot { display: grid; grid-template-columns: subgrid; }
 .topic-foot > * { grid-column: 1 / -1; }

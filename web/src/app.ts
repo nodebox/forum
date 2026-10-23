@@ -11,6 +11,9 @@ import {
   categoryTopics,
   createReply,
   createTopic,
+  canEditPost,
+  editPost,
+  getPostForEdit,
   getCategory,
   getTopic,
   latestTopics,
@@ -42,7 +45,7 @@ import {
   type SignInResult,
 } from "./auth.ts";
 import { UploadError, fileUrl, imageUrls, isImage, parseRange, playable, settleAttachments, storeUpload } from "./files.ts";
-import { checkFilter, refusalReason, refusePost } from "./spamfilter.ts";
+import { checkFilter, refusalReason, refuseEdit, refusePost } from "./spamfilter.ts";
 import { AvatarError, avatarKey, removeAvatar, setAvatar } from "./avatars.ts";
 import { referencedAttachmentIds, renderMarkdown, excerpt } from "./markdown.ts";
 import { sendMail } from "./mailer.ts";
@@ -69,6 +72,8 @@ import {
   topicPage,
   topicUrl,
   type RenderedPost,
+  editPostPage,
+  refusedEditPage,
   refusedPage,
 } from "./views/pages.ts";
 
@@ -529,6 +534,53 @@ app.post("/t/:id/reply", async (c) => {
     return page(c, refusedPage(), { title: "Not posted", status: 422, mainClass: "narrow" });
   }
   return c.redirect(await postLink(c, topic, postId));
+});
+
+// Authors edit their own posts, and the opener the title, for a while after posting (EDIT_WINDOW_MS).
+async function editablePost(c: Context<AppEnv>) {
+  const { user, redirect } = requireUser(c);
+  if (redirect) return { redirect };
+  const id = Number(c.req.param("id"));
+  const post = Number.isInteger(id) ? await getPostForEdit(c.env.DB, id) : null;
+  const topic = post ? await getTopic(c.env.DB, post.topic_id, true) : null;
+  if (!post || !topic || post.user_id !== user.id) return { redirect: c.notFound() };
+  if (!canEditPost(user, post, topic)) {
+    const why = topic.locked ? "This topic is locked." : "Posts can be edited for 24 hours after posting. This one can't be changed any more.";
+    return { redirect: page(c, messagePage("Can't edit this post", why, { href: await postLink(c, topic, post.id), label: "Back to the post" }), { status: 403, mainClass: "narrow" }) };
+  }
+  return { user, post, topic };
+}
+
+app.get("/posts/:id/edit", async (c) => {
+  const e = await editablePost(c);
+  if (e.redirect) return e.redirect;
+  const { post, topic } = e;
+  return page(c, editPostPage(topic, post, { body: post.body, title: post.opens_topic ? topic.title : undefined }), { title: "Edit post", mainClass: "narrow" });
+});
+
+app.post("/posts/:id/edit", async (c) => {
+  const e = await editablePost(c);
+  if (e.redirect) return e.redirect;
+  const { user, post, topic } = e;
+  const form = await c.req.parseBody({ all: true });
+  const body = String(form["body"] ?? "").trim();
+  const title = post.opens_topic ? String(form["title"] ?? "").replace(/\s+/g, " ").trim().slice(0, 160) : undefined;
+  const fail = (error: string) => page(c, editPostPage(topic, post, { body, title, error }), { title: "Edit post", status: 400, mainClass: "narrow" });
+  if (title !== undefined && title.length < 3) return fail("The title needs a few more words.");
+  if (body.length === 0) return fail("A post can't be empty.");
+  const files = attachmentIds(form);
+  const newTitle = title !== undefined && title !== topic.title ? title : undefined;
+  if (body === post.body && !newTitle && files.length === 0) return c.redirect(await postLink(c, topic, post.id));
+  if (!(await rateLimit(c.env.DB, `edit:${user.id}`, 30, 3600))) return fail("You're editing very fast. Please wait a while and try again.");
+  // New accounts' edits go through the spam filter like their new posts do.
+  const refusal = await refusalReason(c.env, user, { topicTitle: title ?? topic.title, body, opensTopic: Boolean(post.opens_topic) });
+  if (refusal) {
+    await refuseEdit(c.env, { postId: post.id, topicId: topic.id, userId: user.id, reason: refusal });
+    return page(c, refusedEditPage(await postLink(c, topic, post.id)), { title: "Not saved", status: 422, mainClass: "narrow" });
+  }
+  await editPost(c.env.DB, { postId: post.id, topicId: topic.id, userId: user.id, body, title: newTitle, attachmentIds: files });
+  if (files.length) await settleAttachments(c.env, post.id);
+  return c.redirect(await postLink(c, (await getTopic(c.env.DB, topic.id, true))!, post.id));
 });
 
 async function postLink(c: Context<AppEnv>, topic: { id: number; slug: string }, postId: number): Promise<string> {

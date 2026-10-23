@@ -300,6 +300,54 @@ export async function createReply(
   return postId;
 }
 
+/** Authors can edit their own posts, and a topic's opener its title, for this long after posting. */
+export const EDIT_WINDOW_MS = 24 * 3600 * 1000;
+
+export const editableUntil = (post: { created_at: string }) => Date.parse(post.created_at) + EDIT_WINDOW_MS;
+
+/**
+ * Whether this person may edit this post now: their own visible post, in a visible topic that
+ * isn't locked (admins may still edit in locked ones), within the edit window.
+ */
+export function canEditPost(
+  user: User | null,
+  post: { user_id: number; created_at: string; status: PostStatus },
+  topic: { locked: number; status: PostStatus },
+  nowMs = Date.now(),
+): boolean {
+  if (!user || user.banned_at || user.id !== post.user_id) return false;
+  if (post.status !== "visible" || topic.status !== "visible") return false;
+  if (topic.locked && !user.is_admin) return false;
+  return nowMs < editableUntil(post);
+}
+
+/** One post with what editing it needs: its topic id and whether it opens the topic. */
+export async function getPostForEdit(db: D1Database, id: number): Promise<(PostRow & { opens_topic: number }) | null> {
+  return db
+    .prepare(
+      `SELECT p.*, u.name AS author_name, NULL AS author_avatar, u.is_admin AS author_is_admin, u.tender_id AS author_tender_id,
+         p.id = (SELECT id FROM posts WHERE topic_id = p.topic_id ORDER BY created_at, id LIMIT 1) AS opens_topic
+       FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?`,
+    )
+    .bind(id)
+    .first<PostRow & { opens_topic: number }>();
+}
+
+/**
+ * Save an author's edit: the new text, the new title when it is the opening post, and attach
+ * any files added while editing. The post shows as edited; the slug follows a new title.
+ */
+export async function editPost(
+  db: D1Database,
+  input: { postId: number; topicId: number; userId: number; body: string; title?: string; attachmentIds: string[] },
+): Promise<void> {
+  await batch(db, [
+    db.prepare("UPDATE posts SET body = ?, edited_at = ? WHERE id = ?").bind(input.body, now(), input.postId),
+    ...(input.title ? [db.prepare("UPDATE topics SET title = ?, slug = ? WHERE id = ?").bind(input.title, slugify(input.title), input.topicId)] : []),
+    ...claimAttachments(db, input.postId, input.userId, input.attachmentIds),
+  ]);
+}
+
 /** Attach uploads to a post. Only the uploader's own, still-unattached files can be claimed. */
 function claimAttachments(db: D1Database, postId: number, userId: number, ids: string[]): D1PreparedStatement[] {
   return ids

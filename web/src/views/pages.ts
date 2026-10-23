@@ -1,5 +1,5 @@
 import { html, raw } from "hono/html";
-import { REACTIONS, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
+import { REACTIONS, canEditPost, editableUntil, type Attachment, type Category, type PostRow, type ReactionSummary, type TopicRow, type User } from "../db.ts";
 import { fileKind, fileUrl } from "../files.ts";
 import { formatBytes, timeAgo } from "../util.ts";
 import { excerpt, mediaPlayer } from "../markdown.ts";
@@ -308,6 +308,7 @@ export function topicPage(
               <span class="post-author">${p.post.author_name}</span>
               ${p.post.author_is_admin ? html`<span class="tag tag-team">NodeBox team</span>` : ""}
               <a class="post-time" href="#post-${p.post.id}">${time(p.post.created_at)}</a>
+              ${p.post.edited_at ? html`<span class="post-edited" title="Edited ${new Date(p.post.edited_at).toUTCString()}">edited</span>` : ""}
             </header>
             <div class="prose" data-post-body data-author="${p.post.author_name}">${raw(p.html)}</div>
             ${gallery(p.images)}
@@ -317,7 +318,10 @@ export function topicPage(
               ${p.post.status === "visible"
                 ? html`${reactionBar(p.post, p.reactions, user)}
                     ${user && canReply ? html`<button type="button" class="action" data-quote>${icon("quote", { size: 18 })}<span>Quote</span></button>` : ""}
-                    <a class="action" href="#post-${p.post.id}" data-copy-link title="Copy a link to this post">${icon("link", { size: 18 })}<span>Copy link</span></a>`
+                    <a class="action" href="#post-${p.post.id}" data-copy-link title="Copy a link to this post">${icon("link", { size: 18 })}<span>Copy link</span></a>
+                    ${canEditPost(user, p.post, topic)
+                      ? html`<a class="action" href="/posts/${p.post.id}/edit" title="You can edit this post until ${new Date(editableUntil(p.post)).toUTCString()}">${icon("pencil", { size: 18 })}<span>Edit</span></a>`
+                      : ""}`
                 : ""}
               ${isAdmin ? postModMenu(p.post, here) : ""}
             </footer>
@@ -423,6 +427,21 @@ export function newTopicPage(categories: Category[], selected: string | undefine
     </div>`;
   return html`${mainHead({ title: "New topic" })}
     ${composer({ action: "/new", submitLabel: "Post topic", body: values.body, titleField, error: values.error })}`;
+}
+
+export function editPostPage(topic: TopicRow, post: PostRow, values: { body: string; title?: string; error?: string }): Html {
+  const titleField =
+    values.title !== undefined
+      ? html`<div class="field">
+          <label for="title">Title</label>
+          <input id="title" name="title" required minlength="3" maxlength="160" value="${values.title}" autocomplete="off">
+        </div>`
+      : undefined;
+  return html`${mainHead({
+      title: titleField ? "Edit topic" : "Edit post",
+      lede: html`In <a href="${topicUrl(topic)}#post-${post.id}">${topic.title}</a>. Saved changes show as “edited”. Editing closes ${time(new Date(editableUntil(post)).toISOString())}.`,
+    })}
+    ${composer({ action: `/posts/${post.id}/edit`, submitLabel: "Save changes", body: values.body, titleField, error: values.error })}`;
 }
 
 export function signInPage(opts: { next: string; google: boolean; error?: string; email?: string }): Html {
@@ -549,6 +568,15 @@ export function refusedPage(): Html {
     html`Our spam filter thinks it is spam, so nobody else can see it. If that is a mistake, write to
       <a href="mailto:info@nodebox.net">info@nodebox.net</a> and a person will look at it.`,
     { href: "/", label: "Back to the forum" },
+  );
+}
+
+export function refusedEditPage(back: string): Html {
+  return messagePage(
+    "Your edit was not saved",
+    html`Our spam filter thinks the new version is spam, so the post keeps its earlier text. If that is a mistake, write to
+      <a href="mailto:info@nodebox.net">info@nodebox.net</a> and a person will look at it.`,
+    { href: back, label: "Back to the post" },
   );
 }
 

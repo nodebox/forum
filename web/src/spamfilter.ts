@@ -1,4 +1,4 @@
-// Spam filter for new posts. It reads what new accounts write before the post
+// Spam filter for new posts and for edits. It reads what new accounts write before the post
 // is stored, refuses what it is sure about, and never stands in the way
 // otherwise: no key, an error, a slow answer or a doubtful verdict all mean the
 // post is published. When the filter can't be reached the admins hear about it.
@@ -168,9 +168,26 @@ const REFUSED = "status = 'spam' AND moderated_by IS NULL AND tender_number IS N
  * after too many. The post stays restorable from /admin until the purge removes it.
  */
 export async function refusePost(env: Bindings, p: { postId: number; topicId: number; userId: number; reason: string }): Promise<void> {
-  const { userId } = p;
-  await log(env.DB, { adminId: null, action: "spam", postId: p.postId, topicId: p.topicId, userId, reason: `Spam filter: ${p.reason}` }).run();
-  const refused = await env.DB.prepare(`SELECT count(*) AS n FROM posts WHERE user_id = ? AND ${REFUSED}`).bind(userId).first<{ n: number }>();
+  await log(env.DB, { adminId: null, action: "spam", postId: p.postId, topicId: p.topicId, userId: p.userId, reason: `Spam filter: ${p.reason}` }).run();
+  await banAfterRefusals(env, p.userId);
+}
+
+/**
+ * Log an edit the filter refused. The edit isn't saved, so the post keeps its earlier text;
+ * refused edits count towards the ban like refused posts, so editing can't be used to probe.
+ */
+export async function refuseEdit(env: Bindings, p: { postId: number; topicId: number; userId: number; reason: string }): Promise<void> {
+  await log(env.DB, { adminId: null, action: "edit_refused", postId: p.postId, topicId: p.topicId, userId: p.userId, reason: `Spam filter: ${p.reason}` }).run();
+  await banAfterRefusals(env, p.userId);
+}
+
+async function banAfterRefusals(env: Bindings, userId: number): Promise<void> {
+  const refused = await env.DB.prepare(
+    `SELECT (SELECT count(*) FROM posts WHERE user_id = ?1 AND ${REFUSED})
+          + (SELECT count(*) FROM moderation_log WHERE user_id = ?1 AND action = 'edit_refused') AS n`,
+  )
+    .bind(userId)
+    .first<{ n: number }>();
   if ((refused?.n ?? 0) >= MAX_REFUSALS) await banUser(env.DB, userId, null, false);
 }
 

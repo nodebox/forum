@@ -108,3 +108,91 @@ with uncommitted changes there is no commit to link to. A bare
 - Code: `npx wrangler rollback` (or pick a version under Workers → Deployments).
 - Data: D1 Time Travel, `npx wrangler d1 time-travel restore nodebox-forum --timestamp <ISO time>`.
   Migrations only go forward; a bad one is fixed by a new migration or a restore.
+- Older than 30 days, or the database or account is gone: the backups below.
+
+## Backups
+
+The forum, its bucket and the backup bucket are in the Sint Lucas Cloudflare
+account (`account_id` in `wrangler.jsonc`).
+
+`.github/workflows/backup.yml` runs `backup/backup.sh` every night at 03:23 UTC
+and on demand (`gh workflow run backup.yml`). It writes to the private R2 bucket
+`nodebox-forum-backup` and, when `STORAGEBOX_HOST` is set, to a Hetzner Storage
+Box sub-account:
+
+| Path | What | Kept |
+| --- | --- | --- |
+| `d1/daily/forum-<day>.sql.gz` | D1 as SQL, from `/backup.sql`: schema, then data | 35 days |
+| `d1/monthly/forum-<day>.sql.gz` | the dump of the 1st | 400 days |
+| `files/` | the `nodebox-forum` bucket as it is now | |
+| `files-removed/<day>/` | files that left the bucket that day | 90 days |
+| `archive/` | the Tender export, `nodebox-tender-archive-2026-10-25.zip` | always |
+
+The script prunes by the date in the name, on both sides. Before it writes, it
+loads the dump into SQLite and checks integrity, foreign keys, the row counts
+on its last line, and the search index. It stops before syncing when the
+source has fewer than 90% of the mirrored files.
+
+The forum writes the dump itself (`src/backup.ts`) at `/backup.sql`, for a
+request with `Authorization: Bearer <BACKUP_TOKEN>`; without the secret, or with
+a wrong token, the page is a 404. A D1 API token can't be limited to one
+database, and this account holds others; the Worker's binding reaches only this
+one. All tables are read in one batch, so the dump is one moment. It leaves out
+`sessions`, `login_tokens` and `rate_limits` (after a restore everyone signs in
+again) and the search tables, which their triggers fill again on load. Its last
+line counts each table's rows. (`wrangler d1 export` refuses this database
+anyway, because of the FTS5 tables.)
+
+The backups hold email addresses. Neither the bucket nor the sub-account is public.
+
+### Setup
+
+1. Bucket and locks (done; needs a `wrangler login` with R2 scopes):
+   `npx wrangler r2 bucket create nodebox-forum-backup --location weur`,
+   `npx wrangler r2 bucket lock add nodebox-forum-backup d1 d1/ --retention-days 30`,
+   `npx wrangler r2 bucket lock add nodebox-forum-backup archive archive/ --retention-indefinite`.
+   A lock stops anyone with an R2 key from deleting or overwriting what it covers;
+   `files/` has none, because the mirror follows deletions.
+2. R2 API tokens (R2 → Manage API tokens, account tokens): one with Object Read
+   only on `nodebox-forum`, one with Object Read & Write only on
+   `nodebox-forum-backup`. In 1Password: `op://NodeBox/NodeBox Forum/Cloudflare/CF_R2_NODEBOX_FORUM`
+   and `…/CF_R2_NODEBOX_FORUM_BACKUP`. The workflow turns each into an S3 key
+   (the token's ID, and the SHA-256 of the token).
+3. The dump's token: a random value (`openssl rand -hex 32`) in 1Password at
+   `op://NodeBox/NodeBox Forum/Cloudflare/BACKUP_TOKEN`, set on the Worker with
+   `npm run secrets` and in GitHub as `BACKUP_TOKEN`.
+4. Storage Box: a sub-account with SSH on and base directory
+   `nodebox-forum-backup`; a new key pair, installed with
+   `cat key.pub | ssh -p 23 <sub-account>@<host> install-ssh-key`; and
+   automatic snapshots on the box, which the sub-account's key cannot delete.
+5. GitHub (Settings → Environments → `backup`, deployment branch `main` only).
+   Variables: `CLOUDFLARE_ACCOUNT_ID` (`40728e030c0e1a608b66d84b0de7ac62`),
+   `BACKUP_URL` (`https://forum.nodebox.net/backup.sql`), `STORAGEBOX_HOST`, `STORAGEBOX_USER`,
+   `STORAGEBOX_KNOWN_HOSTS` (`ssh-keyscan -p 23 <host>`). Secrets:
+   `BACKUP_TOKEN`, `R2_LIVE_TOKEN`, `R2_BACKUP_TOKEN`,
+   `STORAGEBOX_SSH_KEY`.
+6. Once, the Tender archive, from a machine with rclone remotes `r2` and `sb` for the two:
+   `rclone copyto data/nodebox-tender-archive-2026-10-25.zip r2:nodebox-forum-backup/archive/nodebox-tender-archive-2026-10-25.zip`,
+   and the same to `sb:nodebox-forum/archive/`.
+
+GitHub turns off scheduled workflows in a public repository after 60 days
+without a commit, and emails before it does; turn it back on under Actions.
+
+### Restore
+
+With the same rclone remotes. The database, into a new D1 (the dump creates every table, the search index
+and its triggers):
+
+```sh
+rclone copyto r2:nodebox-forum-backup/d1/daily/forum-<day>.sql.gz . && gunzip forum-<day>.sql.gz
+npx wrangler d1 create nodebox-forum-restored
+npx wrangler d1 execute nodebox-forum-restored --remote --file forum-<day>.sql
+```
+
+Then put its `database_id` in `wrangler.jsonc` and deploy. To try a dump
+first, load it into a throwaway local state and run the forum on it:
+`npx wrangler d1 execute nodebox-forum --local --persist-to /tmp/restore --file forum-<day>.sql`,
+then `npx wrangler dev --persist-to /tmp/restore`.
+
+The files: `rclone copy r2:nodebox-forum-backup/files r2:nodebox-forum`, or one
+day's `files-removed/<day>/` for files deleted by mistake.

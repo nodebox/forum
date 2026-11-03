@@ -6,7 +6,8 @@ Replaces the Tender-hosted NodeBox forum with our own on Cloudflare. `docs/PLAN.
 
 - `src/`, `migrations/`, `test/`: the Tender exporter and the spam filter. They fill `data/forum.sqlite` and `data/attachments/`. See `README.md`.
 - `web/`: the forum, a Cloudflare Worker (Hono, D1, R2). Also the importer and the attachment uploader, in `web/scripts/`. See `web/README.md`.
-- `data/`: git-ignored. It holds the export, with people's email addresses and private helpdesk messages. Never commit it or upload it.
+- `data/`: git-ignored. It holds the export, with people's email addresses and private helpdesk messages. Never commit it or upload it; its one copy elsewhere is the archive zip in the private backups.
+- `backup/`: the nightly backup of D1 (fetched from the forum's `/backup.sql`, `web/src/backup.ts`) and R2 (`.github/workflows/backup.yml`). Setup and restore: `web/DEPLOY.md`, "Backups".
 
 ## Working here
 

@@ -1,0 +1,76 @@
+# Nightly backup of the forum (D1 as SQL from /backup.sql, and the R2 files) to the
+# nodebox-forum-backup bucket and the Hetzner Storage Box. Setup and restore are
+# in web/DEPLOY.md, "Backups". The logs are public: backup/backup.sh prints no
+# names or content.
+name: Backup
+
+on:
+  schedule:
+    - cron: "23 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    # Only main may use this environment, so its secrets stay out of other branches.
+    environment: backup
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone sqlite3 > /dev/null
+      - name: R2 keys
+        env:
+          ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          LIVE_TOKEN: ${{ secrets.R2_LIVE_TOKEN }}
+          BACKUP_TOKEN: ${{ secrets.R2_BACKUP_TOKEN }}
+        run: |
+          # An R2 API token's S3 key: the token's ID, and the SHA-256 of the token.
+          keys() {
+            token=$(printf %s "$2" | tr -d '[:space:]')  # a secret pasted or piped in may end in a newline
+            id=$(curl -sf -H "Authorization: Bearer $token" "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/tokens/verify" | jq -r .result.id)
+            secret=$(printf %s "$token" | sha256sum | cut -d' ' -f1)
+            echo "::add-mask::$secret"
+            echo "RCLONE_CONFIG_$1_ACCESS_KEY_ID=$id" >> "$GITHUB_ENV"
+            echo "RCLONE_CONFIG_$1_SECRET_ACCESS_KEY=$secret" >> "$GITHUB_ENV"
+          }
+          keys LIVE "$LIVE_TOKEN"
+          keys R2 "$BACKUP_TOKEN"
+      - name: Storage Box key
+        if: vars.STORAGEBOX_HOST != ''
+        env:
+          KEY: ${{ secrets.STORAGEBOX_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.STORAGEBOX_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/storagebox_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/storagebox_known_hosts"
+      - run: backup/backup.sh
+        env:
+          # The forum writes the database dump itself (web/src/backup.ts): a D1 API
+          # token can't be limited to one database, the Worker's binding is.
+          BACKUP_URL: ${{ vars.BACKUP_URL }}
+          BACKUP_TOKEN: ${{ secrets.BACKUP_TOKEN }}
+          # Two R2 tokens: read-only on the forum's bucket, read-write on the backup bucket only.
+          RCLONE_CONFIG_LIVE_TYPE: s3
+          RCLONE_CONFIG_LIVE_PROVIDER: Cloudflare
+          RCLONE_CONFIG_LIVE_ENDPOINT: https://${{ vars.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_LIVE_NO_CHECK_BUCKET: "true"
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ vars.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          # Tokens limited to one bucket cannot list or create buckets.
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          RCLONE_CONFIG_SB_TYPE: sftp
+          RCLONE_CONFIG_SB_HOST: ${{ vars.STORAGEBOX_HOST }}
+          RCLONE_CONFIG_SB_PORT: "23"
+          RCLONE_CONFIG_SB_USER: ${{ vars.STORAGEBOX_USER }}
+          RCLONE_CONFIG_SB_KEY_FILE: ${{ runner.temp }}/storagebox_key
+          RCLONE_CONFIG_SB_KNOWN_HOSTS_FILE: ${{ runner.temp }}/storagebox_known_hosts
+          BACKUP_FILES_SOURCE: live:nodebox-forum
+          BACKUP_TARGETS: r2:nodebox-forum-backup ${{ vars.STORAGEBOX_HOST != '' && 'sb:nodebox-forum' || '' }}

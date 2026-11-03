@@ -52,6 +52,7 @@ import { sendMail } from "./mailer.ts";
 import { feedPosts, feedSearch, feedTopics, lastModified, renderFeed, type Feed } from "./feeds.ts";
 import { isEmail, normalizeEmail, safeNext } from "./util.ts";
 import { banUser, log, moderationQueue, recentLog, renameTopic, searchUsers, setAdmin, setPostStatus, setTopicFlag, unbanUser } from "./moderation.ts";
+import { dumpDatabase, isBackupRequest } from "./backup.ts";
 import { logPage, queuePage, usersPage } from "./views/admin.ts";
 import { layout, type Html } from "./views/layout.ts";
 import {
@@ -210,6 +211,12 @@ function clientIp(c: Context<AppEnv>): string {
 }
 
 // --- Reading ------------------------------------------------------------------
+
+// The whole database for the nightly backup; see src/backup.ts.
+app.get("/backup.sql", async (c) => {
+  if (!(await isBackupRequest(c.env.BACKUP_TOKEN, c.req.header("authorization")))) return c.notFound();
+  return c.body(await dumpDatabase(c.env.DB), 200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+});
 
 app.get("/", async (c) => {
   const p = pageNumber(c);

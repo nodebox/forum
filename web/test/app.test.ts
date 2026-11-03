@@ -873,3 +873,45 @@ test("profile pictures: upload, show, replace, remove, moderate", async () => {
   html = await (await req("/admin/log", { cookie: mod })).text();
   assert.match(html, /removed the profile picture of\s+Pia Picture/);
 });
+
+test("backup.sql: the whole database as SQL, for the backup token only", async () => {
+  // Without a token set the endpoint doesn't exist; a wrong token gets the same answer.
+  assert.equal((await req("/backup.sql")).status, 404);
+  env.BACKUP_TOKEN = "s3cret-backup-token";
+  try {
+    assert.equal((await req("/backup.sql")).status, 404);
+    assert.equal((await req("/backup.sql", { headers: { authorization: "Bearer wrong" } })).status, 404);
+
+    // Values that are easy to get wrong in SQL.
+    const body = "It's a \"quote\";\nnew line -- not a comment\n\\ backslash, ünïcode, 🌀";
+    await env.DB.prepare("INSERT INTO users (id, email, name, created_at) VALUES (4242, 'dump@example.com', 'O''Dump', '2026-10-25')").run();
+    const topic = await env.DB.prepare("INSERT INTO topics (category_id, user_id, title, slug, created_at, last_post_at) VALUES (1, 4242, 'Superformula dump', 'superformula-dump', '2026-10-25', '2026-10-25') RETURNING id").first();
+    await env.DB.prepare("INSERT INTO posts (topic_id, user_id, body, created_at) VALUES (?, 4242, ?, '2026-10-25')").bind(topic.id, body).run();
+    await env.DB.prepare("INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES ('session-secret', 4242, '2026-10-25', '2099-01-01')").run();
+
+    const res = await req("/backup.sql", { headers: { authorization: "Bearer s3cret-backup-token" } });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("cache-control"), "no-store");
+    const dump = await res.text();
+    assert.doesNotMatch(dump, /session-secret/);
+
+    // It loads into an empty SQLite with schema, data and a working search index.
+    const { DatabaseSync } = await import("node:sqlite");
+    const restored = new DatabaseSync(":memory:", { enableForeignKeyConstraints: false });
+    restored.exec(dump);
+    const one = (sql: string) => restored.prepare(sql).get() as Record<string, unknown>;
+    assert.deepEqual(restored.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.equal(one("SELECT name FROM users WHERE id = 4242").name, "O'Dump");
+    assert.equal(one(`SELECT body FROM posts WHERE topic_id = ${topic.id}`).body, body);
+    assert.equal(one("SELECT count(*) AS n FROM sessions").n, 0);
+    assert.equal(one("SELECT count(*) AS n FROM topics_fts WHERE topics_fts MATCH 'superformula'").n, 1);
+    // The last line lists every table's rows, so a cut-off dump is noticed.
+    const counts = /^-- rows: (.+)$/m.exec(dump.trimEnd().split("\n").at(-1)!)![1]!;
+    for (const pair of counts.split(" ")) {
+      const [table, n] = pair.split("=");
+      assert.equal(one(`SELECT count(*) AS n FROM "${table}"`).n, Number(n), table);
+    }
+  } finally {
+    delete env.BACKUP_TOKEN;
+  }
+});

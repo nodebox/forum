@@ -9,3 +9,5 @@ for name in CF_ACCOUNT_ID CF_IMAGES_HASH CF_IMAGES_TOKEN; do
 done
 # The spam filter for new posts; without it no post is checked.
 op read "op://NodeBox/NodeBox Forum/Anthropic/ANTHROPIC_API_KEY" | npx wrangler secret put ANTHROPIC_API_KEY
+# For /backup.sql, which the nightly backup fetches; GitHub has the same value.
+op read "op://NodeBox/NodeBox Forum/Cloudflare/BACKUP_TOKEN" | npx wrangler secret put BACKUP_TOKEN

@@ -28,6 +28,8 @@ export interface Bindings {
   CF_IMAGES_HASH?: string;
   /** For the spam filter on new posts (src/spamfilter.ts). Without it nothing is checked. */
   ANTHROPIC_API_KEY?: string;
+  /** Lets backup/backup.sh fetch /backup.sql (src/backup.ts). Without it that page doesn't exist. */
+  BACKUP_TOKEN?: string;
 }
 
 export interface Variables {

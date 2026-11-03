@@ -126,7 +126,6 @@ Box sub-account:
 | `d1/monthly/forum-<day>.sql.gz` | the dump of the 1st | 400 days |
 | `files/` | the `nodebox-forum` bucket as it is now | |
 | `files-removed/<day>/` | files that left the bucket that day | 90 days |
-| `archive/` | the Tender export, `nodebox-tender-archive-2026-10-25.zip` | always |
 
 The script prunes by the date in the name, on both sides. Before it writes, it
 loads the dump into SQLite and checks integrity, foreign keys, the row counts
@@ -149,8 +148,7 @@ The backups hold email addresses. Neither the bucket nor the sub-account is publ
 
 1. Bucket and locks (done; needs a `wrangler login` with R2 scopes):
    `npx wrangler r2 bucket create nodebox-forum-backup --location weur`,
-   `npx wrangler r2 bucket lock add nodebox-forum-backup d1 d1/ --retention-days 30`,
-   `npx wrangler r2 bucket lock add nodebox-forum-backup archive archive/ --retention-indefinite`.
+   `npx wrangler r2 bucket lock add nodebox-forum-backup d1 d1/ --retention-days 30`.
    A lock stops anyone with an R2 key from deleting or overwriting what it covers;
    `files/` has none, because the mirror follows deletions.
 2. R2 API tokens (R2 → Manage API tokens, account tokens): one with Object Read
@@ -161,19 +159,19 @@ The backups hold email addresses. Neither the bucket nor the sub-account is publ
 3. The dump's token: a random value (`openssl rand -hex 32`) in 1Password at
    `op://NodeBox/NodeBox Forum/Cloudflare/BACKUP_TOKEN`, set on the Worker with
    `npm run secrets` and in GitHub as `BACKUP_TOKEN`.
-4. Storage Box: a sub-account with SSH on and base directory
-   `nodebox-forum-backup`; a new key pair, installed with
-   `cat key.pub | ssh -p 23 <sub-account>@<host> install-ssh-key`; and
-   automatic snapshots on the box, which the sub-account's key cannot delete.
+4. Storage Box: sub-account `u130221-sub2`, base directory `ForumBackup`, with
+   SSH and external reachability on (GitHub's runners are outside Hetzner). Its
+   key pair is in 1Password under `op://NodeBox/NodeBox Forum/Hetzner/`
+   (`STORAGEBOX_SSH_KEY`, `STORAGEBOX_SSH_PUBLIC_KEY`), installed with
+   `op read -n …/STORAGEBOX_SSH_PUBLIC_KEY | ssh -p 23 <user>@<user>.your-storagebox.de install-ssh-key`.
+   Turn on automatic snapshots on the box: the sub-account's key cannot delete them.
 5. GitHub (Settings → Environments → `backup`, deployment branch `main` only).
    Variables: `CLOUDFLARE_ACCOUNT_ID` (`40728e030c0e1a608b66d84b0de7ac62`),
    `BACKUP_URL` (`https://forum.nodebox.net/backup.sql`), `STORAGEBOX_HOST`, `STORAGEBOX_USER`,
-   `STORAGEBOX_KNOWN_HOSTS` (`ssh-keyscan -p 23 <host>`). Secrets:
+   `STORAGEBOX_KNOWN_HOSTS` (`ssh-keyscan -p 23 -t ed25519,ecdsa,rsa <host>`; rclone
+   fails with "key mismatch" when the key type it asks for is missing). Secrets:
    `BACKUP_TOKEN`, `R2_LIVE_TOKEN`, `R2_BACKUP_TOKEN`,
    `STORAGEBOX_SSH_KEY`.
-6. Once, the Tender archive, from a machine with rclone remotes `r2` and `sb` for the two:
-   `rclone copyto data/nodebox-tender-archive-2026-10-25.zip r2:nodebox-forum-backup/archive/nodebox-tender-archive-2026-10-25.zip`,
-   and the same to `sb:nodebox-forum/archive/`.
 
 GitHub turns off scheduled workflows in a public repository after 60 days
 without a commit, and emails before it does; turn it back on under Actions.

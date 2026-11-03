@@ -71,8 +71,9 @@ count() { local n; n=$( { rclone size --json "$1" 2> /dev/null || true; } | jq -
 
 source_count=$(count "$BACKUP_FILES_SOURCE")
 for target in $BACKUP_TARGETS; do
-  rclone copyto "$dump.gz" "$target/d1/daily/forum-$day.sql.gz"
-  [ "${day:8:2}" != 01 ] || rclone copyto "$dump.gz" "$target/d1/monthly/forum-$day.sql.gz"
+  # The bucket locks d1/, so a dump uploaded earlier the same day stays as it is.
+  rclone copyto --ignore-existing "$dump.gz" "$target/d1/daily/forum-$day.sql.gz"
+  [ "${day:8:2}" != 01 ] || rclone copyto --ignore-existing "$dump.gz" "$target/d1/monthly/forum-$day.sql.gz"
 
   # A source that suddenly looks much smaller is more likely a wrong path or
   # token than a real deletion; stop before the mirror follows it.

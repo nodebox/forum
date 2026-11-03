@@ -23,7 +23,12 @@ jobs:
     environment: backup
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone sqlite3 > /dev/null
+      - name: Install rclone and sqlite3
+        # Ubuntu's rclone (1.60) gets NotImplemented from R2 on every first upload.
+        run: |
+          curl -sSfLO https://downloads.rclone.org/v1.75.2/rclone-v1.75.2-linux-amd64.deb
+          echo "efbfe852181f7191eb3c9043ed1ab49c9b2d0ba045c61c926a5da111c939ec5c  rclone-v1.75.2-linux-amd64.deb" | sha256sum -c -
+          sudo apt-get update -qq && sudo apt-get install -y -qq ./rclone-v1.75.2-linux-amd64.deb sqlite3 > /dev/null
       - name: R2 keys
         env:
           ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

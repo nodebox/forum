@@ -12,7 +12,8 @@
     "export": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts",
-    "spam": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/spam-cli.ts"
+    "spam": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/spam-cli.ts",
+    "corpus:push": "op run --env-file=.env.corpus -- node --disable-warning=ExperimentalWarning src/corpus-cli.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

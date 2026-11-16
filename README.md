@@ -94,6 +94,34 @@ WHERE NOT EXISTS (SELECT 1 FROM spam_excluded s WHERE s.discussion_id = c.discus
                   AND s.comment_number IN (0, c.number));
 ```
 
+## The NodeBox 4 test corpus
+
+NodeBox 4 is tested against the documents people attached to the forum. They
+sit unpacked in `data/nb4-check/inputs/d<discussion id>/`, and a copy goes to
+the private R2 bucket `nodebox-test-corpus` so that a CI runner can fetch it
+(`scripts/fetch-corpus.mjs` in fdb/nodebox4).
+
+```sh
+npm run corpus:push -- --dry-run   # count what would go
+npm run corpus:push                # upload a snapshot named after today
+```
+
+What goes: the files of topics that are public and not spam, the same topics
+the forum shows. What stays: private topics, post text, names and addresses,
+macOS leftovers, and the Node Library releases (`--node-library` adds them).
+These are other people's files; the bucket has no public URL and must not get
+one.
+
+| Key | What |
+| --- | --- |
+| `snapshots/<name>/corpus.tar.gz` | the files, paths as under `inputs/` |
+| `snapshots/<name>/manifest.json` | the archive's SHA-256, and each file's path, size and SHA-256 |
+| `latest.json` | `{"snapshot": "<name>"}`, written last |
+
+A snapshot is never overwritten. The keys are in 1Password, item **NodeBox
+Test Corpus** in the **NodeBox** vault (`.env.corpus`): a key that reads and
+writes for this script, and a read-only key for CI.
+
 ## Schema
 
 `migrations/0001_tender_import.sql` is plain SQLite and D1-compatible, so the

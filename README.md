@@ -119,8 +119,9 @@ one.
 | `latest.json` | `{"snapshot": "<name>"}`, written last |
 
 A snapshot is never overwritten. The keys are in 1Password, item **NodeBox
-Test Corpus** in the **NodeBox** vault (`.env.corpus`): a key that reads and
-writes for this script, and a read-only key for CI.
+App** in the **NodeBox** vault: section **Test Corpus** holds the key that
+reads and writes, for this script (`.env.corpus`), and section **Test Corpus
+Read** the read-only key for CI.
 
 ## Schema
 

@@ -55,8 +55,8 @@ const env = (name: string) => {
   return v;
 };
 const bucket: Bucket = {
-  endpoint: `https://${env("CORPUS_R2_ACCOUNT_ID")}.r2.cloudflarestorage.com`,
-  bucket: env("CORPUS_R2_BUCKET"),
+  endpoint: env("CORPUS_R2_ENDPOINT"),
+  bucket: process.env.CORPUS_R2_BUCKET ?? "nodebox-test-corpus",
   accessKeyId: env("CORPUS_R2_ACCESS_KEY_ID"),
   secretAccessKey: env("CORPUS_R2_SECRET_ACCESS_KEY"),
 };

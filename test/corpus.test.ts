@@ -22,6 +22,7 @@ test("select keeps public topics and drops private ones, junk and the Node Libra
     "d1/0-a.ndbx/data.csv": "x",
     "d1/1-zip/__MACOSX/._a.ndbx": "junk",
     "d1/1-zip/.DS_Store": "junk",
+    "d1/1-zip/Icon\r": "",
     "d2/0-secret.ndbx/secret.ndbx": "private",
     "d3/0-Node_Library_3.7/Node Library 3.7/time.py": "lib",
     "notes/readme.txt": "not a topic",
@@ -31,16 +32,18 @@ test("select keeps public topics and drops private ones, junk and the Node Libra
   const isPublic = (id: number) => id !== 2;
   const picked = select(dir, isPublic);
   assert.deepEqual(picked.files, ["d1/0-a.ndbx/a.ndbx", "d1/0-a.ndbx/data.csv"]);
-  assert.deepEqual(picked.skipped, { privateTopics: 1, unknownFolders: 2, junk: 2, nodeLibrary: 1, notFiles: 1 });
+  assert.deepEqual(picked.skipped, { privateTopics: 1, unknownFolders: 2, junk: 3, nodeLibrary: 1, notFiles: 1 });
   assert.ok(select(dir, isPublic, true).files.includes("d3/0-Node_Library_3.7/Node Library 3.7/time.py"));
 });
 
 test("pack writes exactly the selected files and a manifest without anything else", async () => {
-  const dir = tree({ "d1/a b.ndbx": "<ndbx/>", "d1/data.csv": "x", "d2/secret.ndbx": "private" });
+  const dir = tree({ "d1/a b.ndbx": "<ndbx/>", "d1/data.csv": "x", "d1/odd\r.txt": "", "d2/secret.ndbx": "private" });
   const archive = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "corpus-out-")), "c.tar.gz");
-  const manifest = await pack(dir, ["d1/a b.ndbx", "d1/data.csv"], archive, "2026-01-01");
-  const listed = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" }).trim().split("\n").sort();
-  assert.deepEqual(listed, ["d1/a b.ndbx", "d1/data.csv"]);
+  const manifest = await pack(dir, ["d1/a b.ndbx", "d1/data.csv", "d1/odd\r.txt"], archive, "2026-01-01");
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), "corpus-x-"));
+  execFileSync("tar", ["-xzf", archive, "-C", out]);
+  assert.deepEqual(fs.readdirSync(out), ["d1"]);
+  assert.deepEqual(fs.readdirSync(path.join(out, "d1")).sort(), ["a b.ndbx", "data.csv", "odd\r.txt"]);
   assert.equal(manifest.documents, 1);
   assert.equal(manifest.archive.key, "snapshots/2026-01-01/corpus.tar.gz");
   assert.equal(manifest.archive.size, fs.statSync(archive).size);

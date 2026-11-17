@@ -13,8 +13,9 @@ export interface Selection {
   skipped: { privateTopics: number; unknownFolders: number; junk: number; nodeLibrary: number; notFiles: number };
 }
 
+// macOS leftovers. "Icon\r" holds a folder's custom Finder icon; its name ends in a carriage return.
 const isJunk = (parts: string[]) =>
-  parts.some((p) => p === "__MACOSX" || p === ".DS_Store" || p.startsWith("._"));
+  parts.some((p) => p === "__MACOSX" || p === ".DS_Store" || p === "Icon\r" || p.startsWith("._"));
 
 /**
  * Walk `inputs` and keep the files of topics `isPublic` accepts. A top-level
@@ -62,10 +63,11 @@ export const manifestKey = (snapshot: string) => `snapshots/${snapshot}/manifest
 /** Pack the selected files into `archive` (gzipped tar, paths relative to `inputs`) and describe it. */
 export async function pack(inputs: string, files: string[], archive: string, snapshot: string): Promise<Manifest> {
   const list = archive + ".files";
-  fs.writeFileSync(list, files.join("\n") + "\n");
+  // NUL-separated, so a name with a carriage return or a newline reaches tar intact.
+  fs.writeFileSync(list, files.map((f) => f + "\0").join(""));
   try {
     // COPYFILE_DISABLE keeps macOS tar from adding ._ files for extended attributes.
-    execFileSync("tar", ["-czf", archive, "-C", inputs, "-T", list], {
+    execFileSync("tar", ["-czf", archive, "-C", inputs, "--null", "-T", list], {
       env: { ...process.env, COPYFILE_DISABLE: "1" },
       stdio: ["ignore", "inherit", "inherit"],
     });
